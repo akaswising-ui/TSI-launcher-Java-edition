@@ -320,6 +320,17 @@ object AmethystEngineBridge {
         context.startActivity(intent)
     }
 
+    /** Open Amethyst's original .jar mod installer and its document picker. */
+    fun openModJarInstaller(context: Context) {
+        val intent = Intent()
+            .setClassName(context, LAUNCHER_ACTIVITY)
+            .putExtra("tsi_open_mod_jar_installer", true)
+        if (context !is Activity) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
     /** Open the original Amethyst gamepad remapper through its launcher activity. */
     fun openGamepadMapper(context: Context) {
         val intent = Intent()
