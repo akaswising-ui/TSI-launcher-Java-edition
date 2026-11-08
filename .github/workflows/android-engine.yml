@@ -156,6 +156,11 @@ jobs:
               "Add account",
               "File Manager access",
               "OPEN FILE ACCESS SETTINGS",
+              "Lcom/tsi/launcher/ModPackManagerScreenKt;",
+              "IMPORT .ZIP / .MRPACK",
+              "MODRINTH",
+              "CURSEFORGE",
+              "Importing modpack archive",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:

@@ -19,6 +19,19 @@ The original Amethyst/Pojav launcher home remains the Android app entry screen. 
 
 The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The direct Java Edition download is [app-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/app-debug.apk). This release asset is produced by the engine workflow, not the dashboard-only shell workflow. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
 
+## Feature parity with the Pojav/Amethyst engine
+
+TSI embeds the pinned Amethyst Android engine rather than reimplementing a desktop JVM launcher. The original engine source, native libraries and launcher services are built into the engine APK. TSI adds its own Java version dashboard, verified installer, Android JRE manager and isolated game-data bridge.
+
+- **Game engine:** Android JVM startup, LWJGL 2 compatibility / LWJGL 3, SDL game surface, OpenAL audio and native renderer/input layers are provided by Amethyst.
+- **Versions and runtime:** TSI's catalogue, complete client/library/asset installer and Java 8/17/21/25 Android runtime packages connect to Amethyst's MultiRT/JVM pipeline.
+- **Mod loaders:** Forge, Fabric, Quilt, NeoForge and OptiFine installer paths remain in the embedded engine. TSI's integration adds shared runtime selection and inherited vanilla-version resolution.
+- **Modpacks:** The TSI Mod Pack screen now uses the embedded Modrinth + CurseForge APIs for live search, version selection, installation, and ZIP/MRPACK import. It no longer displays sample preview packs.
+- **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. They have not all been duplicated as Compose settings panels.
+- **Accounts:** This TSI build remains offline-account focused. It does not pretend an offline profile is a Microsoft-authenticated account or bypass online server entitlement checks.
+
+The TSI dashboard and the original Amethyst launcher entry remain separate screens. A successful build confirms packaging and compilation, not gameplay on every Android ABI/GPU or every Minecraft release.
+
 ## Vivo Y22 / 6 GB RAM profile
 
 The launcher reads Android's reported physical RAM and selects a conservative heap target:
