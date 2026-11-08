@@ -197,27 +197,35 @@ private fun TsiLauncherApp() {
     var legacyStoragePermissionGranted by remember {
         mutableStateOf(
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-                    PackageManager.PERMISSION_GRANTED
+                (
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                        PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                        PackageManager.PERMISSION_GRANTED
+                )
         )
     }
     var overflowOpen by remember { mutableStateOf(false) }
 
     val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        legacyStoragePermissionGranted = granted
-        if (granted) {
-            statusMessage = "Shared storage permission granted. Minecraft files can be installed."
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        legacyStoragePermissionGranted =
+            grants[Manifest.permission.READ_EXTERNAL_STORAGE] == true &&
+                grants[Manifest.permission.WRITE_EXTERNAL_STORAGE] == true
+        statusMessage = if (legacyStoragePermissionGranted) {
+            "Shared storage permission granted. Minecraft files can be installed."
         } else {
-            statusMessage = "Storage permission is required on Android 9 and older to install Minecraft files."
+            "Read and write storage permissions are both required on Android 9 and older."
         }
         storageAccessRefreshKey++
     }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !legacyStoragePermissionGranted) {
-            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            legacyStoragePermissionLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
         }
     }
 
@@ -227,8 +235,12 @@ private fun TsiLauncherApp() {
             storageAccessRefreshKey++
             legacyStoragePermissionGranted =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-                        PackageManager.PERMISSION_GRANTED
+                    (
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                            PackageManager.PERMISSION_GRANTED &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                            PackageManager.PERMISSION_GRANTED
+                    )
             AmethystEngineBridge.selectedAccountUsername(context)?.let { selectedUsername ->
                 profileName = selectedUsername
                 preferences.edit().putString("profile_name", selectedUsername).apply()
@@ -430,7 +442,9 @@ private fun TsiLauncherApp() {
                                             !legacyStoragePermissionGranted
                                         ) {
                                             statusMessage = "Storage permission is required before installing Minecraft files."
-                                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                            legacyStoragePermissionLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
                                             return@launch
                                         }
                                         activeDownload = version.id
@@ -486,7 +500,9 @@ private fun TsiLauncherApp() {
                         storageAccessRefreshKey = storageAccessRefreshKey,
                         legacyStoragePermissionGranted = legacyStoragePermissionGranted,
                         onRequestLegacyStoragePermission = {
-                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            legacyStoragePermissionLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
                         }
                     )
                 }

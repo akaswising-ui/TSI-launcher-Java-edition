@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import com.tsi.launcher.data.MinecraftLibraryResolver
 import com.tsi.launcher.storage.AmethystStoragePaths
+import com.tsi.launcher.storage.VersionDirectoryManager
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -51,7 +52,8 @@ data class VersionVmInspection(
  * LWJGL, renderer, surface and input bridge must also be linked.
  */
 class JavaRuntimeManager(private val context: Context) {
-    private val root = AmethystStoragePaths.minecraftHome(context.applicationContext)
+    private val directoryManager = VersionDirectoryManager(context.applicationContext)
+    private val root = directoryManager.root()
     // Amethyst's MultiRTUtils reads runtimes from Tools.MULTIRT_HOME,
     // which is <app-data>/runtimes. Install once in that exact shared location.
     private val amethystRuntimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
@@ -60,6 +62,7 @@ class JavaRuntimeManager(private val context: Context) {
 
     fun inspect(versionId: String, runtimePreference: String): VersionVmInspection {
         val safeId = safeSegment(versionId)
+        directoryManager.migrateLegacyStorage()
         val versionFolder = File(File(root, "versions"), safeId)
         val clientJar = File(versionFolder, "$safeId.jar")
         val metadataFile = File(versionFolder, "$safeId.json")

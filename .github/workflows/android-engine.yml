@@ -139,6 +139,10 @@ jobs:
           required = [
               "Lcom/tsi/launcher/MainActivity;",
               "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
+              "Lcom/tsi/launcher/storage/AmethystStoragePaths;",
+              "Lcom/tsi/launcher/storage/VersionDirectoryManager;",
+              "migrateLegacyStorage",
+              "hasLegacyStoragePermission",
               "Lcom/tsi/launcher/runtime/DevicePerformanceProfile;",
               "Lcom/tsi/launcher/data/MinecraftLibraryResolver;",
               "verifyAmethystOfflineAccount",
