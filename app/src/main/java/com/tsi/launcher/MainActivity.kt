@@ -1513,6 +1513,22 @@ private fun SettingsScreen(
                 ) {
                     Text("CONFIGURE GAMEPAD")
                 }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            AmethystEngineBridge.openModJarInstaller(context)
+                        }.onFailure { error ->
+                            Toast.makeText(
+                                context,
+                                "Could not open mod installer: ${error.message ?: "engine unavailable"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("INSTALL MOD JAR")
+                }
             }
         }
     }
