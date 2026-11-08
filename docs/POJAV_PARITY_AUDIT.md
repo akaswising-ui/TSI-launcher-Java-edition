@@ -44,6 +44,18 @@ Audit baseline: repository `main` at 2026-11-08. This document distinguishes cod
 
 A feature present in Amethyst is not automatically a native TSI Compose screen. The requested scope is to keep the TSI UI, so engine-owned advanced screens should remain accessible through explicit TSI entry points rather than being replaced or visually cloned. Avoid duplicating engine settings unless a real integration gap is demonstrated.
 
+## Changes now implemented on this branch
+
+The TSI Settings screen keeps its existing card styling and adds three native-engine actions:
+
+- **Edit touch controls** opens Amethyst's `CustomControlsActivity`. The bridge installs the bundled default control map only if the destination map is missing or empty; existing user layouts are not overwritten.
+- **Configure gamepad** opens Amethyst's existing `GamepadMapperFragment` through a one-shot launcher intent.
+- **Install mod JAR** opens Amethyst's registered JAR document picker and existing installer callback.
+
+The engine integration script contains the intent routing needed by the gamepad and JAR installer shortcuts. The engine APK CI DEX check now requires the Compose actions, bridge methods, routing extra keys and native engine screen classes. The existing dashboard design and icon assets were not intentionally modified.
+
+These are code integrations, not verified on-device results. The PR's engine build and physical-device acceptance tests still determine whether they work on actual devices.
+
 ## Required verification before calling parity complete
 
 1. Build the engine-integrated APK using `.github/workflows/android-engine.yml`; do not use the dashboard-shell smoke artifact as a playable APK.
