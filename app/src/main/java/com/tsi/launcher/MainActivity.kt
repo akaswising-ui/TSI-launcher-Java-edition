@@ -475,6 +475,7 @@ private fun TsiLauncherApp() {
                         ramMb = ramMb.toInt(),
                         runtimePreference = javaRuntime,
                         playerName = profileName,
+                        storageAccessRefreshKey = storageAccessRefreshKey,
                         onBackToDashboard = { section = MainSection.DASHBOARD }
                     )
                     MainSection.MOD_PACKS -> ModPackManagerScreen(

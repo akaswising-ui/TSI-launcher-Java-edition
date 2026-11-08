@@ -181,6 +181,9 @@ class JavaRuntimeManager(private val context: Context) {
         val engineBridgeAvailable = AmethystEngineBridge.isAvailable(context)
 
         val blockers = buildList {
+            if (!AmethystStoragePaths.hasLegacyStoragePermission(context)) {
+                add("Grant READ and WRITE storage permission in Android settings before using Amethyst's shared Minecraft folder.")
+            }
             if (!clientJarValid) add("Client JAR is missing, incomplete or has the wrong size for $safeId.")
             if (!metadataFile.isFile) add("Version metadata JSON is missing.")
             if (requiredMajor == null) add("Java major version could not be resolved from version metadata.")

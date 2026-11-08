@@ -69,6 +69,7 @@ fun VirtualMachineControllerScreen(
     ramMb: Int,
     runtimePreference: String,
     playerName: String,
+    storageAccessRefreshKey: Int,
     onBackToDashboard: () -> Unit
 ) {
     val context = LocalContext.current
@@ -115,7 +116,7 @@ fun VirtualMachineControllerScreen(
         }
     }
 
-    LaunchedEffect(versionId, runtimePreference) {
+    LaunchedEffect(versionId, runtimePreference, storageAccessRefreshKey) {
         refreshInspection()
     }
 
