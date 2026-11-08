@@ -710,21 +710,67 @@ old_picker = """        String runtime = getSelectedRuntime(minecraftProfile);
             if(profileRuntime != null) minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX+preferredRuntime;
             runtime = preferredRuntime;
         }"""
-new_picker = """        String runtime = getSelectedRuntime(minecraftProfile);
+new_picker = """        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
+            throw new IllegalArgumentException("Invalid Minecraft Java requirement: " + targetJavaVersion);
+        }
+
+        Runtime selectedRuntime = null;
         String profileRuntime = getRuntimeName(minecraftProfile.javaDir);
-        Runtime pickedRuntime = runtime == null ? null : MultiRTUtils.forceReread(runtime);
-        if(runtime == null || pickedRuntime == null || pickedRuntime.javaVersion == 0 ||
-                pickedRuntime.javaVersion < targetJavaVersion) {
-            String preferredRuntime = MultiRTUtils.getNearestJreName(targetJavaVersion);
-            if(preferredRuntime == null) {
-                throw new RuntimeException("No installed Android Java runtime can run Java " +
-                        targetJavaVersion + ". Install the matching Android JRE in TSI VM Controller and retry.");
+
+        // Prefer the profile-specific runtime when it is valid and new enough.
+        if (profileRuntime != null && !profileRuntime.isEmpty()) {
+            Runtime candidate = MultiRTUtils.forceReread(profileRuntime);
+            if (candidate != null && candidate.versionString != null &&
+                    !candidate.versionString.isEmpty() && candidate.javaVersion >= targetJavaVersion) {
+                selectedRuntime = candidate;
             }
-            if(profileRuntime != null) minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX+preferredRuntime;
-            runtime = preferredRuntime;
-        }"""
+        }
+
+        // Next try the launcher default. A blank or stale default must not stop auto-picking.
+        if (selectedRuntime == null) {
+            String defaultRuntime = LauncherPreferences.PREF_DEFAULT_RUNTIME;
+            if (defaultRuntime != null && !defaultRuntime.isEmpty()) {
+                Runtime candidate = MultiRTUtils.forceReread(defaultRuntime);
+                if (candidate != null && candidate.versionString != null &&
+                        !candidate.versionString.isEmpty() && candidate.javaVersion >= targetJavaVersion) {
+                    selectedRuntime = candidate;
+                }
+            }
+        }
+
+        // Finally scan every valid installed MultiRT entry and select the lowest compatible major.
+        if (selectedRuntime == null) {
+            List<Runtime> installedRuntimes = MultiRTUtils.getInstalledRuntimes();
+            for (Runtime candidate : installedRuntimes) {
+                if (candidate == null || candidate.versionString == null ||
+                        candidate.versionString.isEmpty() || candidate.javaVersion < targetJavaVersion) {
+                    continue;
+                }
+                if (selectedRuntime == null || candidate.javaVersion < selectedRuntime.javaVersion) {
+                    selectedRuntime = candidate;
+                }
+            }
+        }
+
+        if (selectedRuntime == null) {
+            StringBuilder detected = new StringBuilder();
+            for (Runtime candidate : MultiRTUtils.getInstalledRuntimes()) {
+                if (candidate == null || candidate.versionString == null || candidate.versionString.isEmpty()) continue;
+                if (detected.length() > 0) detected.append(", ");
+                detected.append(candidate.name).append(" (Java ").append(candidate.javaVersion).append(")");
+            }
+            String available = detected.length() == 0 ? "none detected" : detected.toString();
+            throw new RuntimeException("No compatible Android Java runtime found for Minecraft Java " +
+                    targetJavaVersion + ". Installed runtimes: " + available +
+                    ". Install Java " + targetJavaVersion + " or newer in TSI VM Controller, then retry.");
+        }
+
+        // Save the runtime on this profile, including when it had no Java override before.
+        minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX + selectedRuntime.name;
+        LauncherProfiles.write();
+        return selectedRuntime.name;"""
 tools = replace_once(tools, old_picker, new_picker, "runtime auto-picker and stale-cache fix")
-endAnchor
+tools_path.write_text(tools)
 if "No compatible Android Java runtime found for Minecraft Java " not in tools:
     raise SystemExit("Robust Java runtime auto-picker was not integrated.")
 if "LauncherProfiles.write();" not in tools:
@@ -734,6 +780,23 @@ if "LauncherProfiles.write();" not in tools:
 # that case before reading selectedRankedRuntime.value.
 new_jre_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/NewJREUtil.java"
 new_jre = new_jre_path.read_text()
+old_selected_runtime = """        String profileRuntime = Tools.getSelectedRuntime(minecraftProfile);
+        Runtime runtime = MultiRTUtils.read(profileRuntime);
+        // Partly trust the user with his own selection, if the game can even try to run in this case
+        if (runtime.javaVersion >= gameRequiredVersion) {"""
+new_selected_runtime = """        String profileRuntime = Tools.getSelectedRuntime(minecraftProfile);
+        Runtime runtime = profileRuntime == null || profileRuntime.isEmpty()
+                ? null : MultiRTUtils.forceReread(profileRuntime);
+        // Partly trust the user with his own selection, but never trust a stale or unreadable runtime entry.
+        if (runtime != null && runtime.versionString != null &&
+                !runtime.versionString.isEmpty() && runtime.javaVersion >= gameRequiredVersion) {"""
+new_jre = replace_once(
+    new_jre,
+    old_selected_runtime,
+    new_selected_runtime,
+    "refresh selected runtime before Java requirement check",
+)
+
 old_null_order = """        // Check if the selected runtime actually exists in the APK, else download it
         // If it isn't InternalRuntime then it wasn't in the apk in the first place!
         if (selectedRankedRuntime.value instanceof InternalRuntime)"""
