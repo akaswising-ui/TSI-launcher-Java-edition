@@ -149,7 +149,7 @@ fun ModPackManagerScreen(
     fun importSelectedFile(uri: Uri) {
         scope.launch {
             importing = true
-            statusMessage = "Importing modpack archive…"
+            statusMessage = "Importing modpack archive..."
             try {
                 val result = withContext(Dispatchers.IO) {
                     val displayName = context.contentResolver.query(
@@ -260,7 +260,7 @@ fun ModPackManagerScreen(
 
         OutlinedButton(
             onClick = {
-                val intent = Intent(context, net.kdt.pojavlaunch.LauncherActivity::class.java)
+                val intent = Intent().setClassName(context, "net.kdt.pojavlaunch.LauncherActivity")
                 intent.putExtra("tsi_open_modloader_manager", true)
                 context.startActivity(intent)
             },

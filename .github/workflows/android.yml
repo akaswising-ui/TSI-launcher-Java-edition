@@ -45,6 +45,36 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Prepare engine-free Mod Pack screen stub
+        shell: bash
+        run: |
+          cat > app/src/main/java/com/tsi/launcher/ModPackManagerScreen.kt <<'KOTLIN'
+          package com.tsi.launcher
+
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.material3.Text
+          import androidx.compose.runtime.Composable
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.unit.dp
+
+          // This workflow validates only the dashboard shell. The real Modrinth/
+          // CurseForge implementation is compiled by android-engine.yml.
+          @Composable
+          fun ModPackManagerScreen(
+              modifier: Modifier = Modifier,
+              profileName: String,
+              searchQuery: String,
+              onInstancesClick: () -> Unit
+          ) {
+              Column(modifier.padding(12.dp)) {
+                  Text("Mod Pack features are available in the full engine APK.")
+                  Text(profileName)
+                  Text(searchQuery)
+              }
+          }
+          KOTLIN
+
       - name: Build debug APK
         run: gradle :app:assembleDebug
 

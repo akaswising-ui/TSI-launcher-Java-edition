@@ -160,7 +160,7 @@ jobs:
               "IMPORT .ZIP / .MRPACK",
               "MODRINTH",
               "CURSEFORGE",
-              "Importing modpack archive",
+              "Importing modpack archive...",
               "OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS",
               "OPEN ADVANCED ENGINE SETTINGS",
               "tsi_open_modloader_manager",

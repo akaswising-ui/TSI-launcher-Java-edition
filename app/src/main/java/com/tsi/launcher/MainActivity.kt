@@ -1530,7 +1530,7 @@ private fun SettingsScreen(
                 )
                 OutlinedButton(
                     onClick = {
-                        val intent = Intent(context, net.kdt.pojavlaunch.LauncherActivity::class.java)
+                        val intent = Intent().setClassName(context, "net.kdt.pojavlaunch.LauncherActivity")
                         intent.putExtra("tsi_open_engine_settings", true)
                         context.startActivity(intent)
                     },
