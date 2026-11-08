@@ -452,7 +452,7 @@ private fun TsiLauncherApp() {
     if (profileDialogOpen) {
         AlertDialog(
             onDismissRequest = { profileDialogOpen = false },
-            title = { Text("Account manager") },
+            title = { Text("Offline account") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -467,38 +467,6 @@ private fun TsiLauncherApp() {
                     )
                     Text(
                         "Use 3–16 letters, numbers or underscores to create a local offline account.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TsiMuted
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                AmethystEngineBridge.openMicrosoftAccountManager(context)
-                                profileDialogOpen = false
-                            } catch (error: Exception) {
-                                profileError = error.message ?: "Could not open Microsoft sign-in."
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Continue with Microsoft")
-                    }
-                    TextButton(
-                        onClick = {
-                            try {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://signup.live.com/"))
-                                )
-                            } catch (error: Exception) {
-                                profileError = "Could not open Microsoft's account signup page."
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Create a free Microsoft account")
-                    }
-                    Text(
-                        "A Microsoft account is free. Minecraft Java Edition still requires its own game license.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TsiMuted
                     )

@@ -131,26 +131,57 @@ object AmethystEngineBridge {
      * Existing account files are preserved so an account with saved data is
      * never overwritten by the launcher UI.
      */
-    /**
-     * Opens Amethyst's native account manager, which contains its official
-     * Microsoft sign-in and entitlement-validation flow.
-     */
-    fun openMicrosoftAccountManager(context: Context) {
-        try {
-            val intent = Intent()
-                .setClassName(context, "net.kdt.pojavlaunch.LauncherActivity")
-            if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (error: Exception) {
-            throw IOException("Amethyst account manager could not be opened.", error)
+    /** Select a durable local account before Amethyst creates its account spinner. */
+    fun ensureOfflineAccountSelected(context: Context): String {
+        val preferences = context.getSharedPreferences("tsi_launcher_preferences", Context.MODE_PRIVATE)
+        val currentName = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+            .getString(PROFILE_PREF_FILE, null)?.trim()
+        if (!currentName.isNullOrBlank() && isLocalAccountFile(context, currentName)) {
+            val username = readAccountUsername(context, currentName) ?: currentName
+            preferences.edit().putString("profile_name", username).apply()
+            return username
         }
+        val requested = preferences.getString("profile_name", "Steve001")
+            ?.trim()?.takeIf { it.matches(Regex("[A-Za-z0-9_]{3,16}")) } ?: "Steve001"
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountsDirectory = File(dataRoot, "accounts")
+        var candidate = requested
+        if (File(accountsDirectory, candidate + ".json").exists() && !isLocalAccountFile(context, candidate)) {
+            candidate = (1..99).asSequence().map { suffix ->
+                val tail = "_" + suffix
+                requested.take(16 - tail.length) + tail
+            }.firstOrNull { name ->
+                !File(accountsDirectory, name + ".json").exists() || isLocalAccountFile(context, name)
+            } ?: throw IOException("Could not select an unused offline username.")
+        }
+        addOfflineAccount(context, candidate)
+        if (!preferences.edit().putString("profile_name", candidate).commit()) {
+            throw IOException("Could not save the offline username.")
+        }
+        return candidate
     }
 
+    private fun readAccountUsername(context: Context, accountName: String): String? {
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountFile = File(File(dataRoot, "accounts"), accountName + ".json")
+        return runCatching { JSONObject(accountFile.readText(Charsets.UTF_8)).optString("username").trim().takeIf { it.isNotBlank() } }.getOrNull()
+    }
+
+    private fun isLocalAccountFile(context: Context, accountName: String): Boolean {
+        if (!accountName.matches(Regex("[A-Za-z0-9_]{1,64}"))) return false
+        val dataRoot = context.filesDir.parentFile ?: context.filesDir
+        val accountFile = File(File(dataRoot, "accounts"), accountName + ".json")
+        return runCatching {
+            if (!accountFile.isFile) return@runCatching false
+            val json = JSONObject(accountFile.readText(Charsets.UTF_8))
+            json.optString("accessToken", "0") == "0" && !json.optString("username", accountName).startsWith("Demo.") && !json.optBoolean("isMicrosoft", false)
+        }.getOrDefault(false)
+    }
     /** Returns the current account channel for the dashboard status pill. */
     fun selectedAccountMode(context: Context): String = when {
         selectedAccountUsername(context) == null -> "No account"
-        selectedAccountIsMicrosoft(context) -> "Microsoft"
-        else -> "Offline"
+        selectedAccountIsLocal(context) -> "Offline"
+        else -> "No account"
     }
 
     /** Returns the selected Amethyst account username, if one is saved. */
@@ -185,6 +216,12 @@ object AmethystEngineBridge {
             accountFile.isFile &&
                 JSONObject(accountFile.readText(Charsets.UTF_8)).optBoolean("isMicrosoft", false)
         }.getOrDefault(false)
+    }
+
+    private fun selectedAccountIsLocal(context: Context): Boolean {
+        val name = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+            .getString(PROFILE_PREF_FILE, null)?.trim() ?: return false
+        return isLocalAccountFile(context, name)
     }
 
     fun addOfflineAccount(context: Context, username: String): File {

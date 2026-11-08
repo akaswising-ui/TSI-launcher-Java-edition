@@ -327,13 +327,7 @@ old_directory_gate = """        mOpenDirectoryButton.setOnClickListener((v)-> {
             } else openPath(v.getContext(), getCurrentProfileDirectory(), false);
 
         });"""
-new_directory_gate = """        mOpenDirectoryButton.setOnClickListener((v)-> {
-            if (Tools.isDemoProfile(v.getContext())) {
-                hasNoOnlineProfileDialog(getActivity(), getString(R.string.demo_unsupported), getString(R.string.change_account));
-            } else {
-                openPath(v.getContext(), getCurrentProfileDirectory(), false);
-            }
-        });"""
+new_directory_gate = """        mOpenDirectoryButton.setOnClickListener((v)-> openPath(v.getContext(), getCurrentProfileDirectory(), false));"""
 main_menu = replace_once(
     main_menu,
     old_directory_gate,
@@ -383,6 +377,142 @@ for layout_path in (main_menu_layout_path, main_menu_land_layout_path):
         )
     layout = layout.replace(anchor, anchor + "\n\n" + menu_button, 1)
     layout_path.write_text(layout)
+PY
+
+
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"Expected exactly one {label}; found {count}")
+    return text.replace(old, new, 1)
+
+# Select a local profile at application startup, before Amethyst creates its account spinner.
+application_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/PojavApplication.java"
+application = application_path.read_text()
+application = replace_once(
+    application,
+    "import net.kdt.pojavlaunch.utils.FileUtils;",
+    "import net.kdt.pojavlaunch.utils.FileUtils;\nimport com.tsi.launcher.runtime.AmethystEngineBridge;",
+    "offline bootstrap import",
+)
+application = replace_once(
+    application,
+    "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();",
+    "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();\n"
+    "            try {\n"
+    "                AmethystEngineBridge.INSTANCE.ensureOfflineAccountSelected(this);\n"
+    "            } catch (Throwable accountError) {\n"
+    "                Log.e(\"TSI Launcher\", \"Could not initialise the offline profile.\", accountError);\n"
+    "            }",
+    "startup offline profile selection",
+)
+application_path.write_text(application)
+
+# Hide Demo and Microsoft entries from the account selector. Keep valid local files only.
+account_spinner_path = root / "app_pojavlauncher/src/main/java/com/kdt/mcgui/mcAccountSpinner.java"
+account_spinner = account_spinner_path.read_text()
+account_spinner = replace_once(
+    account_spinner,
+    """            if(accountFolder.exists()){
+                for (String fileName : accountFolder.list()) {
+                    mAccountList.add(fileName.substring(0, fileName.length() - 5));
+                }
+            }""",
+    """            if(accountFolder.exists()){
+                File[] accountFiles = accountFolder.listFiles((directory, name) -> name.endsWith(".json"));
+                if (accountFiles != null) {
+                    for (File accountFile : accountFiles) {
+                        String accountName = accountFile.getName();
+                        accountName = accountName.substring(0, accountName.length() - 5);
+                        MinecraftAccount account = MinecraftAccount.load(accountName);
+                        if (account != null && account.isLocal()) mAccountList.add(accountName);
+                    }
+                }
+            }""",
+    "local-only account list",
+)
+account_spinner_path.write_text(account_spinner)
+
+# Account creation routes directly to the local username screen.
+auth_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/SelectAuthFragment.java"
+auth = auth_path.read_text()
+auth = replace_once(
+    auth,
+    """        Button mMicrosoftButton = view.findViewById(R.id.button_microsoft_authentication);
+        Button mLocalButton = view.findViewById(R.id.button_local_authentication);
+
+        mMicrosoftButton.setOnClickListener(v -> Tools.swapFragment(requireActivity(), MicrosoftLoginFragment.class, MicrosoftLoginFragment.TAG, null));
+        mLocalButton.setOnClickListener(v -> hasNoOnlineProfileDialog(requireActivity(), () -> Tools.swapFragment(requireActivity(), LocalLoginFragment.class, LocalLoginFragment.TAG, null)));""",
+    """        Tools.swapFragment(requireActivity(), LocalLoginFragment.class, LocalLoginFragment.TAG, null);""",
+    "offline-only authentication route",
+)
+auth_path.write_text(auth)
+
+# Local account creation must not be blocked because no online account exists.
+local_login_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/LocalLoginFragment.java"
+local_login = local_login_path.read_text()
+local_login = local_login.replace("import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;\n", "")
+local_login = replace_once(
+    local_login,
+    """        // This is overkill but meh
+        if (!hasOnlineProfile()){
+            Tools.swapFragment(requireActivity(), MainMenuFragment.class, MainMenuFragment.TAG, null);
+        }
+""",
+    "",
+    "offline login redirect gate",
+)
+local_login_path.write_text(local_login)
+
+# Do not launch Demo or Microsoft accounts from this offline-only launcher.
+launcher_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/LauncherActivity.java"
+launcher = launcher_path.read_text()
+launcher = replace_once(
+    launcher,
+    """        if(mAccountSpinner.getSelectedAccount() == null){
+            Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
+            ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
+            return false;
+        }""",
+    """        if(mAccountSpinner.getSelectedAccount() == null ||
+                !mAccountSpinner.getSelectedAccount().isLocal()){
+            Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
+            ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
+            return false;
+        }""",
+    "offline-only launch guard",
+)
+demo_gate = """        // Do not load when is a modded version or older than minecraft 1.3 on demo account
+        if (mAccountSpinner.getSelectedAccount().isDemo()) {
+            boolean isOlderThan13 = true;
+
+            if (mcVersion != null) {
+                try {
+                    isOlderThan13 = DateUtils.dateBefore(DateUtils.parseReleaseDate(mcVersion.releaseTime), 2012, 6, 22);
+                } catch (ParseException ignored) {}
+            }
+
+            if (isOlderThan13) {
+                hasNoOnlineProfileDialog(this, getString(R.string.global_error), getString(R.string.demo_versions_supported));
+                return false;
+            }
+        }
+
+"""
+launcher = replace_once(launcher, demo_gate, "", "Demo version restriction")
+launcher_path.write_text(launcher)
+
+# Preserve the upstream offline path for game versions whose required files already exist.
+downloader_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/tasks/MinecraftDownloader.java"
+downloader = downloader_path.read_text()
+if "if(isLocalProfile || !isOnline)" not in downloader:
+    raise SystemExit("Existing offline installed-version launch path is missing.")
 PY
 
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
