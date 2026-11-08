@@ -403,8 +403,8 @@ application = replace_once(
 )
 application = replace_once(
     application,
-    "            Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();",
-    "            Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();\n"
+    "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();",
+    "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();\n"
     "            try {\n"
     "                AmethystEngineBridge.INSTANCE.ensureOfflineAccountSelected(this);\n"
     "            } catch (Throwable accountError) {\n"
