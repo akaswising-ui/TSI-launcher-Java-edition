@@ -290,6 +290,32 @@ manifest = replace_once(
 )
 manifest_path.write_text(manifest)
 
+# Local/offline accounts are valid for local gameplay and browsing/importing
+# modpacks. Microsoft ownership is only required by online entitlement services.
+main_menu = main_menu_path.read_text()
+old_modpack_gate = """        if (hasOnlineProfile()) {
+            mInstallJarButton.setOnClickListener(v -> runInstallerWithConfirmation(false));
+            mInstallJarButton.setOnLongClickListener(v -> {
+                runInstallerWithConfirmation(true);
+                return true;
+            });
+        } else mInstallJarButton.setOnClickListener(v -> hasNoOnlineProfileDialog(requireActivity()));"""
+new_modpack_gate = """        mInstallJarButton.setOnClickListener(v -> runInstallerWithConfirmation(false));
+        mInstallJarButton.setOnLongClickListener(v -> {
+            runInstallerWithConfirmation(true);
+            return true;
+        });"""
+main_menu = replace_once(
+    main_menu,
+    old_modpack_gate,
+    new_modpack_gate,
+    "offline-compatible modpack installer entry",
+)
+main_menu_path.write_text(main_menu)
+
+if "hasOnlineProfile()" in new_modpack_gate or "hasNoOnlineProfileDialog" in new_modpack_gate:
+    raise SystemExit("Modpack installer still has an online-account gate.")
+
 main_menu = main_menu_path.read_text()
 main_menu = replace_once(
     main_menu,
