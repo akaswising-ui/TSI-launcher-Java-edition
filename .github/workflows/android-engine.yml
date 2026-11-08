@@ -143,6 +143,8 @@ jobs:
               "Lcom/tsi/launcher/data/MinecraftLibraryResolver;",
               "verifyAmethystOfflineAccount",
               "ensureOfflineAccountSelected",
+              "refreshListedVersion",
+              "No installed Android Java runtime can run Java",
               "Offline account",
               "Offline username",
               "Add account",

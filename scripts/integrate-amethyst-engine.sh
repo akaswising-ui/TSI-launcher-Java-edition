@@ -515,6 +515,246 @@ if "if(isLocalProfile || !isOnline)" not in downloader:
     raise SystemExit("Existing offline installed-version launch path is missing.")
 PY
 
+
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"Expected exactly one {label}; found {count}")
+    return text.replace(old, new, 1)
+
+# An offline identity is not a reason to skip downloads. When the device has
+# internet, local accounts must still be able to install Minecraft and JRE files.
+downloader_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/tasks/MinecraftDownloader.java"
+downloader = downloader_path.read_text()
+downloader = replace_once(
+    downloader,
+    "if(isLocalProfile || !isOnline) {",
+    "if(!isOnline) {",
+    "network-based offline-install decision",
+)
+
+# Without a connection, fail clearly when the selected modloader's vanilla
+# source version or client JAR has not been installed yet.
+old_local_check = """                        File vanillaJsonFile = new File(Tools.DIR_HOME_VERSION + "/" + providedJson.inheritsFrom + "/" + providedJson.inheritsFrom + ".json");
+                        versionMessage = providedJson.inheritsFrom != null ? providedJson.inheritsFrom : versionMessage;
+
+                        // Ensure they're both not some 0 byte corrupted json
+                        if (providedJsonFile.length() == 0 || vanillaJsonFile.exists() && vanillaJsonFile.length() == 0){
+                            throw new RuntimeException("Minecraft "+versionMessage+ " is needed by " +realVersion); }
+
+                        listener.onDownloadDone();"""
+new_local_check = """                        File vanillaJsonFile = providedJson.inheritsFrom == null
+                                ? providedJsonFile
+                                : new File(Tools.DIR_HOME_VERSION + "/" + providedJson.inheritsFrom + "/" + providedJson.inheritsFrom + ".json");
+                        versionMessage = providedJson.inheritsFrom != null ? providedJson.inheritsFrom : versionMessage;
+                        File requiredClientJar = new File(vanillaJsonFile.getParentFile(),
+                                vanillaJsonFile.getName().replace(".json", ".jar"));
+
+                        // A modloader profile is not a substitute for its vanilla
+                        // source version. Do not report success when the parent JAR is absent.
+                        if (!providedJsonFile.isFile() || providedJsonFile.length() == 0 ||
+                                !vanillaJsonFile.isFile() || vanillaJsonFile.length() == 0 ||
+                                !requiredClientJar.isFile() || requiredClientJar.length() == 0) {
+                            throw new IOException("Minecraft " + versionMessage +
+                                    " is required by " + realVersion +
+                                    " but is not installed. Connect to the internet and press Play to download it.");
+                        }
+
+                        listener.onDownloadDone();"""
+downloader = replace_once(
+    downloader,
+    old_local_check,
+    new_local_check,
+    "offline inherited-version and client-JAR validation",
+)
+downloader_path.write_text(downloader)
+
+# The launcher's in-memory version table can be stale for up to 24 hours.
+# Resolve a missing inherited vanilla version from Mojang's official manifest
+# on the downloader worker thread, not on the UI thread.
+async_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/tasks/AsyncMinecraftDownloader.java"
+async_source = async_path.read_text()
+async_source = replace_once(
+    async_source,
+    "import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile;",
+    """import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile;
+import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import net.kdt.pojavlaunch.Tools;
+import net.kdt.pojavlaunch.utils.DownloadUtils;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;""",
+    "Mojang version-manifest fallback imports",
+)
+method_anchor = "    public interface DoneListener{"
+fallback_method = """    /**
+     * Resolve an inherited vanilla version even when the startup version-list
+     * cache is stale. Call only from the background downloader, never the UI.
+     */
+    public static synchronized JMinecraftVersionList.Version refreshListedVersion(String versionId) throws IOException {
+        String manifestJson = DownloadUtils.downloadString(LauncherPreferences.PREF_VERSION_REPOS);
+        JMinecraftVersionList refreshed = Tools.GLOBAL_GSON.fromJson(manifestJson, JMinecraftVersionList.class);
+        if (refreshed == null || refreshed.versions == null) {
+            throw new IOException("Mojang returned an invalid version manifest.");
+        }
+
+        File cacheFile = new File(Tools.DIR_CACHE, "version_list.json");
+        File parent = cacheFile.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+            throw new IOException("Could not create the Minecraft version-list cache folder.");
+        }
+        try (FileOutputStream output = new FileOutputStream(cacheFile)) {
+            output.write(manifestJson.getBytes("UTF-8"));
+            output.flush();
+            output.getFD().sync();
+        }
+        ExtraCore.setValue(ExtraConstants.RELEASE_TABLE, refreshed);
+
+        for (JMinecraftVersionList.Version version : refreshed.versions) {
+            if (versionId.equals(version.id)) return version;
+        }
+        return null;
+    }
+
+"""
+async_source = replace_once(
+    async_source,
+    method_anchor,
+    fallback_method + method_anchor,
+    "background source-version manifest resolver",
+)
+async_path.write_text(async_source)
+
+# If a Fabric/Forge/other custom profile inherits a base version that is missing
+# from the cached Mojang catalogue, fetch that base version's metadata descriptor.
+downloader = downloader_path.read_text()
+old_inheritance = """        if(Tools.isValidString(verInfo.inheritsFrom)) {
+            JMinecraftVersionList.Version inheritedVersion = AsyncMinecraftDownloader.getListedVersion(verInfo.inheritsFrom);
+            // Infinite inheritance !?! :noway:
+            return downloadAndProcessMetadata(activity, inheritedVersion, verInfo.inheritsFrom);
+        }"""
+new_inheritance = """        if(Tools.isValidString(verInfo.inheritsFrom)) {
+            JMinecraftVersionList.Version inheritedVersion = AsyncMinecraftDownloader.getListedVersion(verInfo.inheritsFrom);
+            if (inheritedVersion == null && activity != null && Tools.isOnline(activity)) {
+                inheritedVersion = AsyncMinecraftDownloader.refreshListedVersion(verInfo.inheritsFrom);
+            }
+            File inheritedJson = createGameJsonPath(verInfo.inheritsFrom);
+            if (inheritedVersion == null && !inheritedJson.isFile()) {
+                throw new IOException("Can't find the source version for " + versionName +
+                        " (required Minecraft version=" + verInfo.inheritsFrom + "). Connect to the internet and retry.");
+            }
+            // Infinite inheritance !?! :noway:
+            return downloadAndProcessMetadata(activity, inheritedVersion, verInfo.inheritsFrom);
+        }"""
+downloader = replace_once(
+    downloader,
+    old_inheritance,
+    new_inheritance,
+    "missing inherited vanilla version fallback",
+)
+downloader_path.write_text(downloader)
+
+# Amethyst may have cached a runtime folder before TSI installed it. Refresh the
+# runtime objects from each release file before looking for a compatible JRE.
+multi_rt_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/multirt/MultiRTUtils.java"
+multi_rt = multi_rt_path.read_text()
+old_runtime_list = """        ArrayList<Runtime> runtimes = new ArrayList<>();
+        File[] files = RUNTIME_FOLDER.listFiles();
+        if(files != null) for(File f : files) {
+            runtimes.add(read(f.getName()));
+        }
+        else throw new RuntimeException("The runtime directory does not exist");
+
+        return runtimes;"""
+new_runtime_list = """        ArrayList<Runtime> runtimes = new ArrayList<>();
+        File[] files = RUNTIME_FOLDER.listFiles();
+        if(files != null) {
+            for(File f : files) {
+                if (!f.isDirectory()) continue;
+                // TSI can install a JRE after Amethyst first scanned this folder.
+                // Drop the stale cached Runtime (including a cached Java 0 entry).
+                sCache.remove(f.getName());
+                Runtime runtime = read(f.getName());
+                if (runtime.versionString != null && runtime.javaVersion > 0) {
+                    runtimes.add(runtime);
+                }
+            }
+        } else throw new RuntimeException("The runtime directory does not exist");
+
+        return runtimes;"""
+multi_rt = replace_once(
+    multi_rt,
+    old_runtime_list,
+    new_runtime_list,
+    "refresh installed Android JRE list",
+)
+multi_rt_path.write_text(multi_rt)
+
+# Avoid a null dereference when no JRE can be selected, and report the missing
+# Java major instead of the vague autopick message.
+tools_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/Tools.java"
+tools = tools_path.read_text()
+old_picker = """        String runtime = getSelectedRuntime(minecraftProfile);
+        String profileRuntime = getRuntimeName(minecraftProfile.javaDir);
+        Runtime pickedRuntime = MultiRTUtils.read(runtime);
+        if(runtime == null || pickedRuntime.javaVersion == 0 || pickedRuntime.javaVersion < targetJavaVersion) {
+            String preferredRuntime = MultiRTUtils.getNearestJreName(targetJavaVersion);
+            if(preferredRuntime == null) throw new RuntimeException("Failed to autopick runtime!");
+            if(profileRuntime != null) minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX+preferredRuntime;
+            runtime = preferredRuntime;
+        }"""
+new_picker = """        String runtime = getSelectedRuntime(minecraftProfile);
+        String profileRuntime = getRuntimeName(minecraftProfile.javaDir);
+        Runtime pickedRuntime = runtime == null ? null : MultiRTUtils.forceReread(runtime);
+        if(runtime == null || pickedRuntime == null || pickedRuntime.javaVersion == 0 ||
+                pickedRuntime.javaVersion < targetJavaVersion) {
+            String preferredRuntime = MultiRTUtils.getNearestJreName(targetJavaVersion);
+            if(preferredRuntime == null) {
+                throw new RuntimeException("No installed Android Java runtime can run Java " +
+                        targetJavaVersion + ". Install the matching Android JRE in TSI VM Controller and retry.");
+            }
+            if(profileRuntime != null) minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX+preferredRuntime;
+            runtime = preferredRuntime;
+        }"""
+tools = replace_once(tools, old_picker, new_picker, "runtime auto-picker and stale-cache fix")
+tools_path.write_text(tools)
+
+# NewJREUtil can have no candidates on unsupported/offline devices. Check for
+# that case before reading selectedRankedRuntime.value.
+new_jre_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/NewJREUtil.java"
+new_jre = new_jre_path.read_text()
+old_null_order = """        // Check if the selected runtime actually exists in the APK, else download it
+        // If it isn't InternalRuntime then it wasn't in the apk in the first place!
+        if (selectedRankedRuntime.value instanceof InternalRuntime)"""
+new_null_order = """        // No possible selections
+        if(selectedRankedRuntime == null) {
+            showRuntimeFail(activity, versionInfo);
+            return false;
+        }
+
+        // Check if the selected runtime actually exists in the APK, else download it
+        // If it isn't InternalRuntime then it wasn't in the apk in the first place!
+        if (selectedRankedRuntime.value instanceof InternalRuntime)"""
+new_jre = replace_once(new_jre, old_null_order, new_null_order, "runtime autopick null guard")
+old_late_null = """        // No possible selections
+        if(selectedRankedRuntime == null) {
+            showRuntimeFail(activity, versionInfo);
+            return false;
+        }
+
+        Object selected = selectedRankedRuntime.value;"""
+new_late_null = """        Object selected = selectedRankedRuntime.value;"""
+new_jre = replace_once(new_jre, old_late_null, new_late_null, "remove late runtime null check")
+new_jre_path.write_text(new_jre)
+PY
+
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 

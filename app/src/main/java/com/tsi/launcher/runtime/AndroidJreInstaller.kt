@@ -156,6 +156,13 @@ class AndroidJreInstaller(context: Context) {
             throw IOException("Cannot activate the Java $javaMajor runtime.")
         }
         deleteRecursively(backup)
+        // Amethyst may have cached this runtime folder before TSI installed it.
+        // Force a fresh MultiRT read so the engine can auto-pick the new JRE.
+        runCatching {
+            val multiRt = Class.forName("net.kdt.pojavlaunch.multirt.MultiRTUtils")
+            multiRt.getMethod("forceReread", String::class.java)
+                .invoke(null, "$runtimeNamePrefix$javaMajor")
+        }
         progress("Java $javaMajor runtime installed and verified.")
         finalDirectory
     }
