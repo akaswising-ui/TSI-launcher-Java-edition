@@ -682,7 +682,7 @@ new_runtime_list = """        ArrayList<Runtime> runtimes = new ArrayList<>();
                 // Drop the stale cached Runtime (including a cached Java 0 entry).
                 sCache.remove(f.getName());
                 Runtime runtime = read(f.getName());
-                if (runtime.versionString != null && runtime.javaVersion > 0) {
+                if (isRuntimeUsable(runtime)) {
                     runtimes.add(runtime);
                 }
             }
@@ -695,6 +695,50 @@ multi_rt = replace_once(
     new_runtime_list,
     "refresh installed Android JRE list",
 )
+runtime_helper_anchor = "    public static List<Runtime> getInstalledRuntimes() {"
+runtime_helper = """    /**
+     * Reject stale, incomplete or wrong-ABI runtime folders before they can be auto-picked.
+     */
+    public static boolean isRuntimeUsable(Runtime runtime) {
+        if (runtime == null || runtime.name == null || runtime.versionString == null ||
+                runtime.versionString.isEmpty() || runtime.javaVersion <= 0 || runtime.arch == null ||
+                !runtime.name.matches("[A-Za-z0-9._+-]{1,80}")) return false;
+        if (Architecture.archAsInt(runtime.arch) != getDeviceArchitecture()) return false;
+        try {
+            File runtimeHome = new File(RUNTIME_FOLDER, runtime.name).getCanonicalFile();
+            File runtimeRoot = RUNTIME_FOLDER.getCanonicalFile();
+            if (!runtimeHome.getPath().startsWith(runtimeRoot.getPath() + File.separator) ||
+                    !new File(runtimeHome, "release").isFile()) return false;
+            File[] jvmCandidates = new File[] {
+                new File(runtimeHome, "lib/server/libjvm.so"),
+                new File(runtimeHome, "lib/client/libjvm.so"),
+                new File(runtimeHome, "lib/" + runtime.arch + "/server/libjvm.so"),
+                new File(runtimeHome, "lib/" + runtime.arch + "/client/libjvm.so"),
+                new File(runtimeHome, "lib/amd64/server/libjvm.so"),
+                new File(runtimeHome, "lib/amd64/client/libjvm.so"),
+                new File(runtimeHome, "lib/aarch64/server/libjvm.so"),
+                new File(runtimeHome, "lib/aarch64/client/libjvm.so"),
+                new File(runtimeHome, "lib/arm/server/libjvm.so"),
+                new File(runtimeHome, "lib/arm/client/libjvm.so"),
+                new File(runtimeHome, "lib/x86_64/server/libjvm.so"),
+                new File(runtimeHome, "lib/x86/server/libjvm.so")
+            };
+            for (File candidate : jvmCandidates) {
+                if (candidate.isFile()) return true;
+            }
+        } catch (IOException ignored) {
+            return false;
+        }
+        return false;
+    }
+"""
+multi_rt = replace_once(
+    multi_rt,
+    runtime_helper_anchor,
+    runtime_helper + runtime_helper_anchor,
+    "MultiRT runtime integrity and ABI validator",
+)
+
 multi_rt_path.write_text(multi_rt)
 
 # Avoid a null dereference when no JRE can be selected, and report the missing
@@ -720,8 +764,8 @@ new_picker = """        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
         // Prefer the profile-specific runtime when it is valid and new enough.
         if (profileRuntime != null && !profileRuntime.isEmpty()) {
             Runtime candidate = MultiRTUtils.forceReread(profileRuntime);
-            if (candidate != null && candidate.versionString != null &&
-                    !candidate.versionString.isEmpty() && candidate.javaVersion >= targetJavaVersion) {
+            if (MultiRTUtils.isRuntimeUsable(candidate) &&
+                    candidate.javaVersion >= targetJavaVersion) {
                 selectedRuntime = candidate;
             }
         }
@@ -731,8 +775,8 @@ new_picker = """        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
             String defaultRuntime = LauncherPreferences.PREF_DEFAULT_RUNTIME;
             if (defaultRuntime != null && !defaultRuntime.isEmpty()) {
                 Runtime candidate = MultiRTUtils.forceReread(defaultRuntime);
-                if (candidate != null && candidate.versionString != null &&
-                        !candidate.versionString.isEmpty() && candidate.javaVersion >= targetJavaVersion) {
+                if (MultiRTUtils.isRuntimeUsable(candidate) &&
+                        candidate.javaVersion >= targetJavaVersion) {
                     selectedRuntime = candidate;
                 }
             }
@@ -742,8 +786,8 @@ new_picker = """        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
         if (selectedRuntime == null) {
             List<Runtime> installedRuntimes = MultiRTUtils.getInstalledRuntimes();
             for (Runtime candidate : installedRuntimes) {
-                if (candidate == null || candidate.versionString == null ||
-                        candidate.versionString.isEmpty() || candidate.javaVersion < targetJavaVersion) {
+                if (!MultiRTUtils.isRuntimeUsable(candidate) ||
+                        candidate.javaVersion < targetJavaVersion) {
                     continue;
                 }
                 if (selectedRuntime == null || candidate.javaVersion < selectedRuntime.javaVersion) {
@@ -788,8 +832,8 @@ new_selected_runtime = """        String profileRuntime = Tools.getSelectedRunti
         Runtime runtime = profileRuntime == null || profileRuntime.isEmpty()
                 ? null : MultiRTUtils.forceReread(profileRuntime);
         // Partly trust the user with his own selection, but never trust a stale or unreadable runtime entry.
-        if (runtime != null && runtime.versionString != null &&
-                !runtime.versionString.isEmpty() && runtime.javaVersion >= gameRequiredVersion) {"""
+        if (MultiRTUtils.isRuntimeUsable(runtime) &&
+                runtime.javaVersion >= gameRequiredVersion) {"""
 new_jre = replace_once(
     new_jre,
     old_selected_runtime,
@@ -896,7 +940,7 @@ installer_runtime_helper = """    /**
 
         String selectedName = Tools.getSelectedRuntime(currentProfile);
         Runtime selected = selectedName == null ? null : MultiRTUtils.forceReread(selectedName);
-        if (selected == null || selected.versionString == null ||
+        if (!MultiRTUtils.isRuntimeUsable(selected) ||
                 selected.javaVersion < targetJavaVersion) {
             throw new RuntimeException("No compatible Android JRE is installed for installer Java " +
                     targetJavaVersion + ".");
