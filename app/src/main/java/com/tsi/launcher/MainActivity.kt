@@ -1083,7 +1083,8 @@ private fun VersionPickerPanel(
 ) {
     var filterExpanded by remember { mutableStateOf(false) }
     var versionExpanded by remember { mutableStateOf(false) }
-    val menuVersions = versions.take(180)
+    // Keep the complete Mojang catalogue available; do not impose a UI entry cap.
+    val menuVersions = versions
 
     Card(
         modifier = modifier.animateContentSize(tween(260)),
