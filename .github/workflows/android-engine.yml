@@ -146,7 +146,7 @@ jobs:
               "refreshListedVersion",
               "ensureRuntimeForInstaller",
               "isRuntimeUsable",
-              "No compatible Android Java runtime found for Minecraft Java "
+              "No compatible Android Java runtime found for Minecraft Java ",
               "Offline account",
               "Offline username",
               "Add account",
