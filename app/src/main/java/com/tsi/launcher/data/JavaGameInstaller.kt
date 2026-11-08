@@ -59,6 +59,12 @@ class JavaGameInstaller(
             ?.optInt("majorVersion")
             ?.takeIf { it in 8..99 }
 
+        // Some older Mojang manifests omit ASM's standalone core artifact even
+        // though LaunchWrapper's VanillaTweaker loads org.objectweb.asm classes.
+        // Add the official Maven Central core JAR only when no ASM core/uber JAR
+        // is already declared. This keeps the game classpath metadata-driven.
+        ensureAsmCoreLibrary(metadata)
+
         val metadataFile = File(paths.versionDirectory, "${version.id}.json")
         writeAtomically(metadataFile, metadataText.toByteArray(Charsets.UTF_8))
 
@@ -203,6 +209,31 @@ class JavaGameInstaller(
             assetCount = totalAssets,
             requiredJavaMajor = requiredJava,
             assetIndexId = assetIndexId
+        )
+    }
+
+    private fun ensureAsmCoreLibrary(metadata: JSONObject) {
+        val libraries = metadata.optJSONArray("libraries")
+            ?: org.json.JSONArray().also { metadata.put("libraries", it) }
+        var hasAsmCore = false
+        var hasAsmUber = false
+        for (index in 0 until libraries.length()) {
+            val name = libraries.optJSONObject(index)?.optString("name").orEmpty()
+            if (name.startsWith("org.ow2.asm:asm:")) hasAsmCore = true
+            if (name.startsWith("org.ow2.asm:asm-all:")) hasAsmUber = true
+        }
+        if (hasAsmCore || hasAsmUber) return
+
+        val path = "org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"
+        val artifact = JSONObject()
+            .put("path", path)
+            .put("size", 126093)
+            .put("url", "https://repo.maven.apache.org/maven2/$path")
+        val downloads = JSONObject().put("artifact", artifact)
+        libraries.put(
+            JSONObject()
+                .put("name", "org.ow2.asm:asm:9.7.1")
+                .put("downloads", downloads)
         )
     }
 
