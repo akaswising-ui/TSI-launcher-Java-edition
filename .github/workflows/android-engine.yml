@@ -142,10 +142,10 @@ jobs:
               "Lcom/tsi/launcher/runtime/DevicePerformanceProfile;",
               "Lcom/tsi/launcher/data/MinecraftLibraryResolver;",
               "verifyAmethystOfflineAccount",
-              "Account manager",
+              "ensureOfflineAccountSelected",
+              "Offline account",
               "Offline username",
-              "Continue with Microsoft",
-              "Create a free Microsoft account",
+              "Add account",
               "File Manager access",
               "OPEN FILE ACCESS SETTINGS",
           ]

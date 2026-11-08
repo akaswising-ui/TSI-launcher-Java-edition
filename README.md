@@ -14,7 +14,7 @@ The original Amethyst/Pojav launcher home remains the Android app entry screen. 
 - Verified downloads for version JSON, client JAR, libraries and assets.
 - Android Java runtime detection and installation.
 - Amethyst Android engine integration for the JVM, SDL, LWJGL, graphics and input host.
-- Account management through Amethyst's Microsoft login flow; local profiles are clearly offline profiles.
+- Offline-only local profiles with a saved username; the launcher selects a local profile by default. Already-installed versions can launch offline; first-time game-file downloads still require internet access.
 - VM preflight checks before launch.
 
 The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The direct Java Edition download is [app-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/app-debug.apk). This release asset is produced by the engine workflow, not the dashboard-only shell workflow. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
