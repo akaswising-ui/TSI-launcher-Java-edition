@@ -4,7 +4,7 @@ An Android launcher dedicated to **Minecraft Java Edition**. Bedrock-specific sc
 
 ## Launcher interface
 
-The original Amethyst/Pojav launcher home remains the Android app entry screen. The TSI Java Edition dashboard is a separate screen opened from the **TSI Java Edition Dashboard** button in that home screen. This keeps the normal launcher UI and the TSI runtime/version manager separate while sharing the same embedded Java engine.
+The original Amethyst/Pojav launcher home remains the Android app entry screen. The TSI Java Edition dashboard is a separate screen opened from the **TSI Java Edition Dashboard** button in that home screen. The original launcher UI remains intact. The profile-plus action in the TSI dashboard opens Amethyst's original account selector, including Microsoft sign-in and local/offline account creation. The runtime/version manager shares the same embedded Java engine.
 
 ## Java Edition features
 
@@ -14,7 +14,7 @@ The original Amethyst/Pojav launcher home remains the Android app entry screen. 
 - Verified downloads for version JSON, client JAR, libraries and assets.
 - Android Java runtime detection and installation.
 - Amethyst Android engine integration for the JVM, SDL, LWJGL, graphics and input host.
-- Offline-only local profiles with a saved username; the launcher selects a local profile by default. Already-installed versions can launch offline; first-time game-file downloads still require internet access.
+- Microsoft account sign-in through Amethyst's existing authentication flow, plus local/offline profiles. TSI preserves an already-selected Microsoft account across startup; a local profile is created only when no valid account is selected.
 - VM preflight checks before launch.
 
 The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The direct Java Edition download is [app-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/app-debug.apk). This release asset is produced by the engine workflow, not the dashboard-only shell workflow. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
@@ -28,7 +28,7 @@ TSI embeds the pinned Amethyst Android engine rather than reimplementing a deskt
 - **Mod loaders:** Forge, Fabric, Quilt, NeoForge and OptiFine installer paths remain in the embedded engine. TSI's integration adds shared runtime selection and inherited vanilla-version resolution.
 - **Modpacks:** The TSI Mod Pack screen now uses the embedded Modrinth + CurseForge APIs for live search, version selection, installation, and ZIP/MRPACK import. It no longer displays sample preview packs.
 - **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. They have not all been duplicated as Compose settings panels.
-- **Accounts:** This TSI build remains offline-account focused. It does not pretend an offline profile is a Microsoft-authenticated account or bypass online server entitlement checks.
+- **Accounts:** Microsoft sign-in and local/offline profiles both use Amethyst's original account system. TSI's account action opens the native account selector; it does not collect Microsoft passwords in its own Compose UI. Offline profiles do not grant authenticated-server access or bypass ownership checks.
 
 The TSI dashboard and the original Amethyst launcher entry remain separate screens. A successful build confirms packaging and compilation, not gameplay on every Android ABI/GPU or every Minecraft release.
 

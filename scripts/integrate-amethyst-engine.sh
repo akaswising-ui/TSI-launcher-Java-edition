@@ -238,22 +238,28 @@ auto_launch_resume = """    protected void onResume() {
         ContextExecutor.setActivity(this);
         mInstallTracker.attach();
 
-        // TSI dashboard actions reuse Amethyst's existing engine screens
-        // instead of cloning or replacing their UI.
+        // TSI dashboard actions reuse Amethyst's original screens.
+        // Account management opens the original Microsoft/local account selector.
         boolean openModloaderManager = getIntent().getBooleanExtra("tsi_open_modloader_manager", false);
         boolean openEngineSettings = getIntent().getBooleanExtra("tsi_open_engine_settings", false);
-        if (openModloaderManager || openEngineSettings) {
+        boolean openAccountManager = getIntent().getBooleanExtra("tsi_open_account_manager", false);
+        if (openModloaderManager || openEngineSettings || openAccountManager) {
             getIntent().removeExtra("tsi_open_modloader_manager");
             getIntent().removeExtra("tsi_open_engine_settings");
+            getIntent().removeExtra("tsi_open_account_manager");
             getWindow().getDecorView().post(() -> {
                 if (openModloaderManager) {
                     Tools.swapFragment(this,
                             net.kdt.pojavlaunch.fragments.ProfileTypeSelectFragment.class,
                             net.kdt.pojavlaunch.fragments.ProfileTypeSelectFragment.TAG, null);
-                } else {
+                } else if (openEngineSettings) {
                     Tools.swapFragment(this,
                             net.kdt.pojavlaunch.prefs.screens.LauncherPreferenceFragment.class,
                             SETTING_FRAGMENT_TAG, null);
+                } else {
+                    Tools.swapFragment(this,
+                            net.kdt.pojavlaunch.fragments.SelectAuthFragment.class,
+                            net.kdt.pojavlaunch.fragments.SelectAuthFragment.TAG, null);
                 }
             });
         }
@@ -434,99 +440,10 @@ application = replace_once(
 )
 application_path.write_text(application)
 
-# Hide Demo and Microsoft entries from the account selector. Keep valid local files only.
-account_spinner_path = root / "app_pojavlauncher/src/main/java/com/kdt/mcgui/mcAccountSpinner.java"
-account_spinner = account_spinner_path.read_text()
-account_spinner = replace_once(
-    account_spinner,
-    """            if(accountFolder.exists()){
-                for (String fileName : accountFolder.list()) {
-                    mAccountList.add(fileName.substring(0, fileName.length() - 5));
-                }
-            }""",
-    """            if(accountFolder.exists()){
-                File[] accountFiles = accountFolder.listFiles((directory, name) -> name.endsWith(".json"));
-                if (accountFiles != null) {
-                    for (File accountFile : accountFiles) {
-                        String accountName = accountFile.getName();
-                        accountName = accountName.substring(0, accountName.length() - 5);
-                        MinecraftAccount account = MinecraftAccount.load(accountName);
-                        if (account != null && account.isLocal()) mAccountList.add(accountName);
-                    }
-                }
-            }""",
-    "local-only account list",
-)
-account_spinner_path.write_text(account_spinner)
-
-# Account creation routes directly to the local username screen.
-auth_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/SelectAuthFragment.java"
-auth = auth_path.read_text()
-auth = replace_once(
-    auth,
-    """        Button mMicrosoftButton = view.findViewById(R.id.button_microsoft_authentication);
-        Button mLocalButton = view.findViewById(R.id.button_local_authentication);
-
-        mMicrosoftButton.setOnClickListener(v -> Tools.swapFragment(requireActivity(), MicrosoftLoginFragment.class, MicrosoftLoginFragment.TAG, null));
-        mLocalButton.setOnClickListener(v -> hasNoOnlineProfileDialog(requireActivity(), () -> Tools.swapFragment(requireActivity(), LocalLoginFragment.class, LocalLoginFragment.TAG, null)));""",
-    """        Tools.swapFragment(requireActivity(), LocalLoginFragment.class, LocalLoginFragment.TAG, null);""",
-    "offline-only authentication route",
-)
-auth_path.write_text(auth)
-
-# Local account creation must not be blocked because no online account exists.
-local_login_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/LocalLoginFragment.java"
-local_login = local_login_path.read_text()
-local_login = local_login.replace("import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;\n", "")
-local_login = replace_once(
-    local_login,
-    """        // This is overkill but meh
-        if (!hasOnlineProfile()){
-            Tools.swapFragment(requireActivity(), MainMenuFragment.class, MainMenuFragment.TAG, null);
-        }
-""",
-    "",
-    "offline login redirect gate",
-)
-local_login_path.write_text(local_login)
-
-# Do not launch Demo or Microsoft accounts from this offline-only launcher.
-launcher_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/LauncherActivity.java"
-launcher = launcher_path.read_text()
-launcher = replace_once(
-    launcher,
-    """        if(mAccountSpinner.getSelectedAccount() == null){
-            Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
-            ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
-            return false;
-        }""",
-    """        if(mAccountSpinner.getSelectedAccount() == null ||
-                !mAccountSpinner.getSelectedAccount().isLocal()){
-            Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
-            ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
-            return false;
-        }""",
-    "offline-only launch guard",
-)
-demo_gate = """        // Do not load when is a modded version or older than minecraft 1.3 on demo account
-        if (mAccountSpinner.getSelectedAccount().isDemo()) {
-            boolean isOlderThan13 = true;
-
-            if (mcVersion != null) {
-                try {
-                    isOlderThan13 = DateUtils.dateBefore(DateUtils.parseReleaseDate(mcVersion.releaseTime), 2012, 6, 22);
-                } catch (ParseException ignored) {}
-            }
-
-            if (isOlderThan13) {
-                hasNoOnlineProfileDialog(this, getString(R.string.global_error), getString(R.string.demo_versions_supported));
-                return false;
-            }
-        }
-
-"""
-launcher = replace_once(launcher, demo_gate, "", "Demo version restriction")
-launcher_path.write_text(launcher)
+# Keep Amethyst's original account selector and authentication screens intact.
+# This preserves Microsoft OAuth sign-in and local/offline profiles. Do not filter
+# account files or replace SelectAuthFragment with local login.
+# TSI creates a local profile only when no valid account is already selected.
 
 # Preserve the upstream offline path for game versions whose required files already exist.
 downloader_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/tasks/MinecraftDownloader.java"

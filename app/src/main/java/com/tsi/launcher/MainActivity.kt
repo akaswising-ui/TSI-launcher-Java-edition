@@ -72,7 +72,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -91,7 +90,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -190,9 +188,6 @@ private fun TsiLauncherApp() {
     var javaRuntime by rememberSaveable {
         mutableStateOf(preferences.getString("java_runtime", "Auto") ?: "Auto")
     }
-    var profileDialogOpen by remember { mutableStateOf(false) }
-    var profileDraft by remember { mutableStateOf(profileName) }
-    var profileError by remember { mutableStateOf("") }
     var storageAccessRefreshKey by remember { mutableIntStateOf(0) }
     var legacyStoragePermissionGranted by remember {
         mutableStateOf(
@@ -430,9 +425,10 @@ private fun TsiLauncherApp() {
                                 profileName = profileName,
                                 accountMode = accountMode,
                                 onAddProfile = {
-                                    profileDraft = profileName
-                                    profileError = ""
-                                    profileDialogOpen = true
+                                    val intent = Intent()
+                                        .setClassName(context, "net.kdt.pojavlaunch.LauncherActivity")
+                                        .putExtra("tsi_open_account_manager", true)
+                                    context.startActivity(intent)
                                 },
                                 activeDownload = activeDownload,
                                 onOpenVmController = { section = MainSection.VM_CONTROLLER },
@@ -511,60 +507,6 @@ private fun TsiLauncherApp() {
         }
     }
 
-    if (profileDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { profileDialogOpen = false },
-            title = { Text("Offline account") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = profileDraft,
-                        onValueChange = {
-                            profileDraft = it
-                            profileError = ""
-                        },
-                        label = { Text("Offline username") },
-                        singleLine = true,
-                        isError = profileError.isNotBlank()
-                    )
-                    Text(
-                        "Use 3–16 letters, numbers or underscores to create a local offline account.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TsiMuted
-                    )
-                    if (profileError.isNotBlank()) {
-                        Text(
-                            profileError,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cleaned = profileDraft.trim()
-                    if (!cleaned.matches(Regex("[A-Za-z0-9_]{3,16}"))) {
-                        profileError = "Username must be 3–16 characters: letters, numbers or underscore."
-                    } else {
-                        try {
-                            AmethystEngineBridge.addOfflineAccount(context.applicationContext, cleaned)
-                            profileName = cleaned
-                            accountMode = "Offline"
-                            preferences.edit().putString("profile_name", cleaned).apply()
-                            statusMessage = "Offline account '$cleaned' added and selected."
-                            profileDialogOpen = false
-                        } catch (error: Exception) {
-                            profileError = error.message ?: "Could not create the offline account."
-                        }
-                    }
-                }) { Text("Add account") }
-            },
-            dismissButton = {
-                TextButton(onClick = { profileDialogOpen = false }) { Text("Cancel") }
-            }
-        )
-    }
 }
 
 @Composable
@@ -698,7 +640,7 @@ private fun ProfileStrip(profileName: String, accountMode: String, onAddProfile:
         verticalAlignment = Alignment.CenterVertically
     ) {
         ProfilePill(
-            eyebrow = "LOCAL PROFILE",
+            eyebrow = if (accountMode == "Microsoft") "MICROSOFT ACCOUNT" else "LOCAL PROFILE",
             name = profileName,
             icon = Icons.Filled.Person,
             active = true
@@ -721,7 +663,7 @@ private fun ProfileStrip(profileName: String, accountMode: String, onAddProfile:
             shadowElevation = 2.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Add, contentDescription = "Add profile", tint = TsiTeal)
+                Icon(Icons.Filled.Add, contentDescription = "Manage accounts", tint = TsiTeal)
             }
         }
     }

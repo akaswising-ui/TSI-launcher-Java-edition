@@ -26,7 +26,7 @@ Data and platform adapters
   ├── Mojang metadata client
   ├── Verified download manager
   ├── Scoped storage manager
-  ├── Android JVM / game engine adapter (planned)
+  ├── Amethyst Android JVM / game engine bridge
   └── Bedrock PackageManager adapter
 ```
 
@@ -34,14 +34,11 @@ Suggested next package boundaries (the existing files are not to be moved just t
 
 ```text
 app/src/main/java/com/tsi/launcher/
-  data/             # Mojang manifest and version metadata
-  storage/          # instances, versions, assets and libraries
+  data/             # Mojang manifest, version metadata and library resolution
+  storage/          # shared .minecraft root, versions and isolated game folders
   bedrock/          # official installed-app integration
-  auth/             # Microsoft OAuth PKCE and token storage (planned)
-  install/          # dependency and asset resolver (planned)
-  launch/           # launch-spec builder and placeholder expansion (planned)
-  runtime/          # Android JVM / native engine bridge (planned)
-  ui/               # Compose screens and navigation (can be split later)
+  runtime/          # Android OpenJDK installer, runtime inspection and Amethyst bridge
+  ui/               # Compose screens and navigation
 ```
 
 ## 2. Java version catalogue and install pipeline
@@ -65,7 +62,7 @@ The safe install pipeline is:
 7. Extract only the selected version's required native libraries to a version/runtime-specific native directory.
 8. Build and validate a launch specification before starting an embedded runtime.
 
-The current installer downloads the selected version JSON and its client JAR only. It verifies the client's SHA-1 and size. Full libraries, assets, native resolution, and engine launch are **not implemented yet**. A downloaded client JAR is not a complete playable installation.
+The current installer fetches and validates the selected version JSON, downloads the client JAR, resolves permitted library artifacts, and downloads the asset index and hash-addressed asset objects. Downloads are checked against Mojang metadata and promoted from temporary files atomically. Amethyst supplies the Android native game host and its native/renderer components; TSI's preflight checks that the metadata, client, libraries, assets, compatible Android JRE and engine bridge are present before launch.
 
 ## 3. Launch arguments and dynamic classpath
 
@@ -121,9 +118,9 @@ fun buildRuntimeArguments(
 }
 ```
 
-This code prepares arguments only. It does not start Minecraft. On Android, a desktop-style `java -jar client.jar` process is not an implementation of the required engine. TSI needs an Android-compatible JVM and the appropriate game/renderer/native bridge. The selected Android Java engine must own or provide the JVM startup API, LWJGL compatibility layer, display surface, touch/mouse/keyboard mapping, audio and lifecycle callbacks. The engine must be checked against each version's metadata and supported Java major.
+This argument shape explains version metadata, but TSI does not run Minecraft with a desktop-style `java -jar client.jar` command. `AmethystEngineBridge` validates the Android JRE and shared game-data root, prepares the Amethyst profile, and hands off to Amethyst's normal Android launch pipeline. Amethyst owns JVM startup, LWJGL 2 compatibility and LWJGL 3, SDL/display surface, OpenAL audio, renderer lifecycle and touch/keyboard/mouse/gamepad input. TSI checks the version's required Java major before handing off.
 
-The PojavLauncher repository has been discontinued and identifies Amethyst Android as its successor. Amethyst is the preferred research/integration target, not a drop-in Gradle dependency. Before importing or linking source, inspect the exact upstream commit, submodules, native build toolchain and each dependency's license. Keep license notices and implement TSI integration as an adapter. Do not describe TSI's current Java tab as capable of launching games until this bridge is in place.
+The original PojavLauncher home is retained in the APK, while TSI's Compose dashboard connects to the pinned Amethyst Android engine through `AmethystEngineBridge`. The engine is built from a pinned upstream revision and initialized by the engine workflow; it is not added as a desktop Java dependency. Keep the upstream source, submodules, native build toolchain and license notices intact when updating the pinned revision. The launcher hand-off and Android-native compatibility still need testing on actual devices and Minecraft versions.
 
 ## 4. Version isolation and storage
 
@@ -165,17 +162,9 @@ Android package signing and app sandboxing prevent TSI from replacing another ap
 
 ## 6. Profiles and authentication
 
-The visible profile-name field in the current build is a local label only. It is not an authenticated Minecraft account.
+TSI supports Microsoft accounts and local/offline profiles through Amethyst's original account selector and authentication fragments. The TSI profile-plus action routes to that native account flow rather than implementing a second password or token handler. Amethyst owns Microsoft sign-in, token refresh, account files and selected-account persistence.
 
-Before online multiplayer is advertised:
-- implement Microsoft's supported OAuth authorization flow using a system browser/Custom Tabs and PKCE where required;
-- perform the Xbox and Minecraft entitlement/profile exchange according to current supported APIs;
-- never ask users to type their Microsoft password into a TSI password field;
-- protect refresh/access tokens using Android Keystore-backed storage;
-- support logout and token revocation/clear flows;
-- do not label an offline profile as an authenticated Microsoft account.
-
-Offline mode must be clearly labelled and must not be presented as a way to bypass account ownership or server authentication.
+The TSI bootstrap creates a default local profile only when no valid local or Microsoft account is already selected. It preserves a selected Microsoft account across process startup and reports the current mode in the TSI dashboard. Offline mode remains clearly labelled and does not grant authenticated multiplayer access or bypass Minecraft ownership checks.
 
 ## 7. Settings and memory
 
