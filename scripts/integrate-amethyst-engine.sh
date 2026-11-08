@@ -768,7 +768,7 @@ new_picker = """        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
         // Save the runtime on this profile, including when it had no Java override before.
         minecraftProfile.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX + selectedRuntime.name;
         LauncherProfiles.write();
-        return selectedRuntime.name;"""
+        String runtime = selectedRuntime.name;"""
 tools = replace_once(tools, old_picker, new_picker, "runtime auto-picker and stale-cache fix")
 tools_path.write_text(tools)
 if "No compatible Android Java runtime found for Minecraft Java " not in tools:
