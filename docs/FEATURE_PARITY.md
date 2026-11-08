@@ -26,6 +26,10 @@ The TSI repository adds a separate Compose dashboard and adapters. It should not
 | Microsoft online authentication | Supported by upstream flow | Disabled in this offline-account-focused TSI configuration |
 | Bedrock Edition | Not part of the Java engine | Separate TSI Bedrock repository / app integration |
 
+## TSI dashboard access to preserved engine features
+
+The TSI Mod Pack screen exposes live provider-backed modpack search and ZIP/MRPACK import. It also has a direct action to open Amethyst's existing Forge, Fabric, Quilt, NeoForge and OptiFine installer screens. The TSI Settings page has an Advanced Engine Settings action that opens the existing renderer, video, control, gamepad, mouse and JVM preference screens. These are entry points into the embedded engine features, not a second implementation of their UI.
+
 ## TSI-specific integration work
 
 - Uses the same Amethyst `.minecraft` storage root for game files.

@@ -238,6 +238,26 @@ auto_launch_resume = """    protected void onResume() {
         ContextExecutor.setActivity(this);
         mInstallTracker.attach();
 
+        // TSI dashboard actions reuse Amethyst's existing engine screens
+        // instead of cloning or replacing their UI.
+        boolean openModloaderManager = getIntent().getBooleanExtra("tsi_open_modloader_manager", false);
+        boolean openEngineSettings = getIntent().getBooleanExtra("tsi_open_engine_settings", false);
+        if (openModloaderManager || openEngineSettings) {
+            getIntent().removeExtra("tsi_open_modloader_manager");
+            getIntent().removeExtra("tsi_open_engine_settings");
+            getWindow().getDecorView().post(() -> {
+                if (openModloaderManager) {
+                    Tools.swapFragment(this,
+                            net.kdt.pojavlaunch.fragments.ProfileTypeSelectFragment.class,
+                            net.kdt.pojavlaunch.fragments.ProfileTypeSelectFragment.TAG, null);
+                } else {
+                    Tools.swapFragment(this,
+                            net.kdt.pojavlaunch.prefs.screens.LauncherPreferenceFragment.class,
+                            SETTING_FRAGMENT_TAG, null);
+                }
+            });
+        }
+
         // TSI launches through Amethyst's normal launcher pipeline. This
         // preserves profile validation, downloader setup, memory warnings,
         // per-version natives, LWJGL selection and crash mitigations.

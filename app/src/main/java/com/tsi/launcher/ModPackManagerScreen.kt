@@ -1,5 +1,6 @@
 package com.tsi.launcher
 
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -255,6 +256,17 @@ fun ModPackManagerScreen(
             ) {
                 Text(if (importing) "IMPORTING…" else "IMPORT .ZIP / .MRPACK", color = Color(0xFF172117), fontSize = 10.sp)
             }
+        }
+
+        OutlinedButton(
+            onClick = {
+                val intent = Intent(context, net.kdt.pojavlaunch.LauncherActivity::class.java)
+                intent.putExtra("tsi_open_modloader_manager", true)
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS", fontSize = 10.sp)
         }
 
         OutlinedTextField(

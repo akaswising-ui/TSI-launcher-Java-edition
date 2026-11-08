@@ -1512,5 +1512,33 @@ private fun SettingsScreen(
                 }
             }
         }
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(
+                Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("Advanced engine settings", color = TsiInk, fontWeight = FontWeight.Bold)
+                Text(
+                    "Open the existing Amethyst settings for renderer, video, controls, gamepad, mouse and JVM options.",
+                    color = TsiMuted,
+                    fontSize = 11.sp
+                )
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(context, net.kdt.pojavlaunch.LauncherActivity::class.java)
+                        intent.putExtra("tsi_open_engine_settings", true)
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("OPEN ADVANCED ENGINE SETTINGS")
+                }
+            }
+        }
     }
 }
