@@ -18,9 +18,10 @@ The TSI repository adds a separate Compose dashboard and adapters. It should not
 | OptiFine | Installer workflow | Retained, with vanilla metadata refresh and common installer-JRE selection |
 | Modpack search | Modrinth and CurseForge APIs | Connected to the TSI Mod Pack screen |
 | Modpack import | CurseForge ZIP and Modrinth MRPACK | Connected to the TSI Mod Pack screen |
+| Individual JAR mod installation | Native document picker and mod installer | TSI Settings shortcut opens the original Amethyst JAR installer |
 | Game rendering | Android renderer bridge and LWJGL compatibility | Uses the embedded Amethyst renderer/native stack |
 | Audio | OpenAL path | Uses the embedded Amethyst audio path |
-| Touch / keyboard / mouse / gamepad | Native input and custom control maps | Engine input and control implementation retained |
+| Touch / keyboard / mouse / gamepad | Native input and custom control maps | Engine input retained; TSI Settings now links directly to the custom touch editor and gamepad mapper |
 | Renderer/video options | Upstream preference screens | Still available in embedded engine settings; not all have duplicate TSI Compose controls |
 | Logs, game folders and file operations | Engine facilities | TSI per-version data folders plus engine facilities |
 | Microsoft online authentication | Supported by upstream flow | Available through the original Amethyst account selector and Microsoft login fragment |
@@ -29,6 +30,8 @@ The TSI repository adds a separate Compose dashboard and adapters. It should not
 ## Account compatibility
 
 The TSI dashboard's existing profile-plus action opens Amethyst's original account selector. Microsoft OAuth sign-in, refresh and local/offline account creation stay in the upstream implementation; TSI does not substitute a custom password form. The selected Microsoft account is preserved across TSI startup and launch-profile preparation.
+
+The TSI Settings card also exposes direct actions for the upstream custom touch-control editor, gamepad remapper and individual JAR mod installer. These actions route into Amethyst's original activities/fragments rather than reimplementing those systems in Compose. The touch editor bootstraps the bundled default map only when no usable map exists, leaving an existing custom layout untouched.
 
 ## TSI dashboard access to preserved engine features
 
@@ -47,6 +50,6 @@ The TSI Mod Pack screen exposes live provider-backed modpack search and ZIP/MRPA
 
 ## Important boundaries
 
-A feature being present in the engine source does not mean every feature is surfaced inside the TSI Compose dashboard. The native engine preferences still provide several advanced settings. The TSI Mod Pack screen is now connected to real provider APIs, replacing the previous sample data.
+The original Amethyst launcher home remains the Android entry screen. The TSI Compose dashboard is a separate screen and keeps its existing visual design and app icon. Native renderer, video, JVM and advanced control preferences remain in Amethyst; TSI provides an explicit Settings entry point. TSI Settings also has direct shortcuts for touch-layout editing, gamepad remapping and JAR mod installation. The Mod Pack screen remains connected to real provider APIs.
 
 Offline profiles do not confer Minecraft ownership or authenticated-server access. Renderer support, native library availability, Java compatibility and memory requirements vary by device and game version. APK CI checks do not replace testing on a physical Android device.
