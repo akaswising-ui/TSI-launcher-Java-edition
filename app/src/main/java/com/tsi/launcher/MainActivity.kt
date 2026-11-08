@@ -1,5 +1,7 @@
 package com.tsi.launcher
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,6 +10,9 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -189,12 +194,41 @@ private fun TsiLauncherApp() {
     var profileDraft by remember { mutableStateOf(profileName) }
     var profileError by remember { mutableStateOf("") }
     var storageAccessRefreshKey by remember { mutableIntStateOf(0) }
+    var legacyStoragePermissionGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                    PackageManager.PERMISSION_GRANTED
+        )
+    }
     var overflowOpen by remember { mutableStateOf(false) }
+
+    val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        legacyStoragePermissionGranted = granted
+        if (granted) {
+            statusMessage = "Shared storage permission granted. Minecraft files can be installed."
+        } else {
+            statusMessage = "Storage permission is required on Android 9 and older to install Minecraft files."
+        }
+        storageAccessRefreshKey++
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !legacyStoragePermissionGranted) {
+            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
 
     val hostActivity = context as? MainActivity
     androidx.compose.runtime.DisposableEffect(hostActivity) {
         hostActivity?.onLauncherResumed = {
             storageAccessRefreshKey++
+            legacyStoragePermissionGranted =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                        PackageManager.PERMISSION_GRANTED
             AmethystEngineBridge.selectedAccountUsername(context)?.let { selectedUsername ->
                 profileName = selectedUsername
                 preferences.edit().putString("profile_name", selectedUsername).apply()
@@ -392,6 +426,13 @@ private fun TsiLauncherApp() {
                                 onOpenVmController = { section = MainSection.VM_CONTROLLER },
                                 onDownload = { version ->
                                     scope.launch {
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                                            !legacyStoragePermissionGranted
+                                        ) {
+                                            statusMessage = "Storage permission is required before installing Minecraft files."
+                                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                            return@launch
+                                        }
                                         activeDownload = version.id
                                         statusMessage = "Preparing complete Java installation for ${version.id}…"
                                         try {
@@ -442,7 +483,11 @@ private fun TsiLauncherApp() {
                             javaRuntime = it
                             preferences.edit().putString("java_runtime", it).apply()
                         },
-                        storageAccessRefreshKey = storageAccessRefreshKey
+                        storageAccessRefreshKey = storageAccessRefreshKey,
+                        legacyStoragePermissionGranted = legacyStoragePermissionGranted,
+                        onRequestLegacyStoragePermission = {
+                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        }
                     )
                 }
             }
@@ -1292,7 +1337,9 @@ private fun SettingsScreen(
     onRamChange: (Float) -> Unit,
     javaRuntime: String,
     onJavaRuntimeChange: (String) -> Unit,
-    storageAccessRefreshKey: Int
+    storageAccessRefreshKey: Int,
+    legacyStoragePermissionGranted: Boolean,
+    onRequestLegacyStoragePermission: () -> Unit
 ) {
     val context = LocalContext.current
     val hasAllFilesAccess = remember(storageAccessRefreshKey) {
@@ -1384,6 +1431,24 @@ private fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 Text("File Manager access", color = TsiInk, fontWeight = FontWeight.Bold)
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    Text(
+                        if (legacyStoragePermissionGranted) {
+                            "Legacy shared-storage write permission is enabled."
+                        } else {
+                            "Android 9 and older require storage permission for the Amethyst game folder."
+                        },
+                        color = if (legacyStoragePermissionGranted) TsiTealDark else TsiMuted,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = onRequestLegacyStoragePermission,
+                        enabled = !legacyStoragePermissionGranted,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (legacyStoragePermissionGranted) "STORAGE PERMISSION ENABLED" else "REQUEST STORAGE PERMISSION")
+                    }
+                }
                 Text(
                     if (hasAllFilesAccess) "Manage all files access is enabled."
                     else "Manage all files access is not enabled.",

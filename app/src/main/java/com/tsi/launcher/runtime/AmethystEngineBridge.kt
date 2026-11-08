@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import com.tsi.launcher.storage.AmethystStoragePaths
 import android.os.SystemClock
 import kotlinx.coroutines.delay
 
@@ -15,8 +16,9 @@ import kotlinx.coroutines.delay
  * Adapter from TSI's installed game/runtime layout to Amethyst's Android game host.
  *
  * Amethyst is built into the same APK by scripts/integrate-amethyst-engine.sh.
- * Its Tools.DIR_GAME_HOME resolves to context.getExternalFilesDir(null), so
- * TSI's .minecraft directory and Amethyst's .minecraft directory are the same.
+ * Its Tools.DIR_GAME_HOME uses AmethystStoragePaths: app external files on
+ * Android 10+, or /storage/emulated/0/games/Amethyst on Android 9 and older.
+ * TSI installers, VM preflight and engine launch all use that same game path.
  * Its MultiRT_HOME resolves to context.filesDir.parentFile/runtimes, which is
  * also where AndroidJreInstaller installs the Android OpenJDK packages.
  */
@@ -87,8 +89,8 @@ object AmethystEngineBridge {
 
     fun missingComponents(context: Context): List<String> {
         val missing = missingEmbeddedComponents(context).toMutableList()
-        val gameRoot = context.getExternalFilesDir(null)
-        if (gameRoot == null) {
+        val gameRoot = AmethystStoragePaths.gameHome(context)
+        if (!gameRoot.exists() || !gameRoot.isDirectory) {
             missing += "Amethyst game storage is unavailable"
         } else {
             requiredLwjglFiles.forEach { relativePath ->
@@ -109,8 +111,7 @@ object AmethystEngineBridge {
         val assetManager = Class.forName("net.kdt.pojavlaunch.tasks.AsyncAssetManager")
         assetManager.getMethod("unpackComponents", Context::class.java).invoke(null, context)
 
-        val gameRoot = context.getExternalFilesDir(null)
-            ?: throw IOException("Amethyst external app storage is unavailable.")
+        val gameRoot = AmethystStoragePaths.gameHome(context)
         val expectedLwjgl = requiredLwjglFiles.map { File(gameRoot, it) }
         val deadline = SystemClock.elapsedRealtime() + 90_000L
         while (expectedLwjgl.any { !it.isFile } && SystemClock.elapsedRealtime() < deadline) {
@@ -324,9 +325,7 @@ object AmethystEngineBridge {
         ) {
             "Java ${runtime.majorVersion} is not installed in Amethyst's MultiRT folder. Return to VM Controller and install a compatible Android JRE."
         }
-        val externalRoot = context.getExternalFilesDir(null)
-            ?: throw IOException("Amethyst external app storage is unavailable.")
-        val minecraftRoot = File(externalRoot, ".minecraft")
+        val minecraftRoot = AmethystStoragePaths.minecraftHome(context)
         val versionDirectory = File(File(minecraftRoot, "versions"), safeVersion)
         require(File(versionDirectory, "$safeVersion.json").isFile) {
             "Minecraft $safeVersion version metadata is missing."
@@ -409,8 +408,7 @@ object AmethystEngineBridge {
      * user's existing custom/default layout.
      */
     private fun ensureDefaultControlMap(context: Context) {
-        val gameRoot = context.getExternalFilesDir(null)
-            ?: throw IOException("Amethyst external app storage is unavailable.")
+        val gameRoot = AmethystStoragePaths.gameHome(context)
         val controlDirectory = File(gameRoot, "controlmap")
         val destination = File(controlDirectory, "default.json")
         if (destination.isFile && destination.length() > 0L) return

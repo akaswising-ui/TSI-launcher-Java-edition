@@ -12,7 +12,7 @@ data class VersionPaths(
 
 class VersionDirectoryManager(context: Context) {
     private val rootDirectory: File =
-        File(context.getExternalFilesDir(null) ?: context.filesDir, ".minecraft")
+        AmethystStoragePaths.minecraftHome(context.applicationContext)
 
     fun ensureVersionLayout(versionId: String): VersionPaths {
         val safeId = safeSegment(versionId)

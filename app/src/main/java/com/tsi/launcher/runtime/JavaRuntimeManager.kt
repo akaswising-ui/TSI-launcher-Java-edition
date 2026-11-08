@@ -3,6 +3,7 @@ package com.tsi.launcher.runtime
 import android.content.Context
 import android.os.Build
 import com.tsi.launcher.data.MinecraftLibraryResolver
+import com.tsi.launcher.storage.AmethystStoragePaths
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -50,10 +51,7 @@ data class VersionVmInspection(
  * LWJGL, renderer, surface and input bridge must also be linked.
  */
 class JavaRuntimeManager(private val context: Context) {
-    private val root = File(
-        context.getExternalFilesDir(null) ?: context.filesDir,
-        ".minecraft"
-    )
+    private val root = AmethystStoragePaths.minecraftHome(context.applicationContext)
     // Amethyst's MultiRTUtils reads runtimes from Tools.MULTIRT_HOME,
     // which is <app-data>/runtimes. Install once in that exact shared location.
     private val amethystRuntimeRoot = File(context.filesDir.parentFile ?: context.filesDir, "runtimes")
