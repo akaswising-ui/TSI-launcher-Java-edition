@@ -34,13 +34,11 @@ Suggested next package boundaries (the existing files are not to be moved just t
 
 ```text
 app/src/main/java/com/tsi/launcher/
-  data/             # Mojang manifest and version metadata
-  storage/          # instances, versions, assets and libraries
-  bedrock/          # official installed-app integration
-  data/             # Mojang manifest, metadata and library resolution
+  data/             # Mojang manifest, version metadata and library resolution
   storage/          # shared .minecraft root, versions and isolated game folders
+  bedrock/          # official installed-app integration
   runtime/          # Android OpenJDK installer, runtime inspection and Amethyst bridge
-  ui/               # Compose screens and navigation (can be split later)
+  ui/               # Compose screens and navigation
 ```
 
 ## 2. Java version catalogue and install pipeline
