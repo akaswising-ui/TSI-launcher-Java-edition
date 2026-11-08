@@ -1264,7 +1264,7 @@ private fun NewsScreen(modifier: Modifier = Modifier) {
         listOf(
             "Java version catalogue" to "Version data is loaded directly from Mojang's official manifest.",
             "Bedrock integration" to "TSI checks the installed Android package and opens the official app.",
-            "Runtime development" to "Android JVM and renderer integration are tracked as separate milestones."
+            "Android runtime" to "The Amethyst Android JVM, LWJGL and renderer bridge are included in engine builds; VM Controller checks device and version compatibility before launch."
         ).forEachIndexed { index, item ->
             Card(
                 modifier = Modifier
