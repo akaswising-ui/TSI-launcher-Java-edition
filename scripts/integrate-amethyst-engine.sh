@@ -755,6 +755,154 @@ new_jre = replace_once(new_jre, old_late_null, new_late_null, "remove late runti
 new_jre_path.write_text(new_jre)
 PY
 
+
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"Expected exactly one {label}; found {count}")
+    return text.replace(old, new, 1)
+
+# OptiFine installs the vanilla client before running its installer. Resolve
+# the selected vanilla release from a refreshed Mojang manifest if the cached
+# startup version list does not contain it.
+optifine_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/modloaders/OptiFineDownloadTask.java"
+optifine = optifine_path.read_text()
+optifine = replace_once(
+    optifine,
+    """        JMinecraftVersionList.Version minecraftJsonVersion = AsyncMinecraftDownloader.getListedVersion(minecraftVersion);
+        if(minecraftJsonVersion == null) return false;""",
+    """        JMinecraftVersionList.Version minecraftJsonVersion = AsyncMinecraftDownloader.getListedVersion(minecraftVersion);
+        if (minecraftJsonVersion == null) {
+            try {
+                minecraftJsonVersion = AsyncMinecraftDownloader.refreshListedVersion(minecraftVersion);
+            } catch (IOException error) {
+                mDownloaderThrowable = error;
+                return false;
+            }
+        }
+        if (minecraftJsonVersion == null) {
+            mDownloaderThrowable = new IOException("Minecraft " + minecraftVersion +
+                    " is not present in Mojang's official version manifest.");
+            return false;
+        }""",
+    "OptiFine vanilla-version manifest fallback",
+)
+optifine_path.write_text(optifine)
+
+# All installer JARs (Forge, NeoForge and OptiFine) need a JVM before they
+# can create their Minecraft profile. Use the same internal/external Android
+# JRE selection used by Minecraft game launches instead of failing when the
+# currently selected runtime is too old or its cached entry is stale.
+new_jre_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/NewJREUtil.java"
+new_jre = new_jre_path.read_text()
+method_anchor = "    private static void showRuntimeFail(Activity activity, JMinecraftVersionList.Version verInfo) {"
+installer_runtime_helper = """    /**
+     * Ensure that a compatible Android JRE is installed and selected before
+     * running a third-party Minecraft installer JAR (Forge/NeoForge/OptiFine).
+     */
+    public static Runtime ensureRuntimeForInstaller(Activity activity, int targetJavaVersion) {
+        if (targetJavaVersion < 8 || targetJavaVersion > 99) {
+            throw new IllegalArgumentException("Invalid installer Java requirement: " + targetJavaVersion);
+        }
+
+        JMinecraftVersionList.Version installerVersion = new JMinecraftVersionList.Version();
+        installerVersion.javaVersion = new JMinecraftVersionList.JavaVersionInfo();
+        installerVersion.javaVersion.component = "jre";
+        installerVersion.javaVersion.majorVersion = targetJavaVersion;
+
+        if (!installNewJreIfNeeded(activity, installerVersion)) {
+            throw new RuntimeException("Could not install or select an Android Java runtime for Java " +
+                    targetJavaVersion + ".");
+        }
+
+        LauncherProfiles.load();
+        MinecraftProfile currentProfile = LauncherProfiles.getCurrentProfile();
+        if (currentProfile == null) {
+            throw new RuntimeException("The launcher profile is unavailable after selecting the Android JRE.");
+        }
+
+        String selectedName = Tools.getSelectedRuntime(currentProfile);
+        Runtime selected = selectedName == null ? null : MultiRTUtils.forceReread(selectedName);
+        if (selected == null || selected.versionString == null ||
+                selected.javaVersion < targetJavaVersion) {
+            throw new RuntimeException("No compatible Android JRE is installed for installer Java " +
+                    targetJavaVersion + ".");
+        }
+        return selected;
+    }
+
+"""
+new_jre = replace_once(
+    new_jre,
+    method_anchor,
+    installer_runtime_helper + method_anchor,
+    "shared installer runtime selector",
+)
+new_jre_path.write_text(new_jre)
+
+java_gui_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/JavaGUILauncherActivity.java"
+java_gui = java_gui_path.read_text()
+old_selector = """        String nearestRuntime = MultiRTUtils.getNearestJreName(javaVersion);
+        if(nearestRuntime == null) {
+            finalErrorDialog(getString(R.string.multirt_nocompatiblert, javaVersion));
+            return null;
+        }
+        Runtime selectedRuntime = MultiRTUtils.forceReread(nearestRuntime);
+        int selectedJavaVersion = Math.max(javaVersion, selectedRuntime.javaVersion);
+        return selectedRuntime;"""
+new_selector = """        try {
+            return NewJREUtil.ensureRuntimeForInstaller(this, javaVersion);
+        } catch (RuntimeException error) {
+            finalErrorDialog("Could not prepare Java " + javaVersion +
+                    " for this modloader installer: " +
+                    (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
+            return null;
+        }"""
+java_gui = replace_once(
+    java_gui,
+    old_selector,
+    new_selector,
+    "Forge/NeoForge/OptiFine installer JRE selection",
+)
+java_gui_path.write_text(java_gui)
+
+# Keep a source-level integration assertion for every loader family. Their
+# installer profiles all flow through the common Amethyst MinecraftDownloader.
+downloader_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/tasks/MinecraftDownloader.java"
+downloader = downloader_path.read_text()
+if "if(!isOnline) {" not in downloader:
+    raise SystemExit("Minecraft downloader is still incorrectly gated by offline account type.")
+if "refreshListedVersion(verInfo.inheritsFrom)" not in downloader:
+    raise SystemExit("Common modloader parent-version resolver is missing.")
+if "requiredClientJar.isFile()" not in downloader:
+    raise SystemExit("Common modloader parent client-JAR validation is missing.")
+
+# Fabric and Quilt both create profiles from this JSON endpoint; the common
+# parent resolver must remain in the game downloader, not duplicated per UI.
+fabric_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/modloaders/FabriclikeDownloadTask.java"
+fabric = fabric_path.read_text()
+if "createJsonDownloadUrl(mGameVersion, mLoaderVersion)" not in fabric:
+    raise SystemExit("Fabric/Quilt profile download path changed; inspect before applying common inheritance fix.")
+
+# Forge and NeoForge use JavaGUILauncherActivity to run their installer JARs.
+for path in (
+    root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/ForgeInstallFragment.java",
+    root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/fragments/NeoForgeInstallFragment.java",
+):
+    source = path.read_text()
+    if "JavaGUILauncherActivity.class" not in source:
+        raise SystemExit(f"Expected installer launch integration not found in {path.name}.")
+
+if "ensureRuntimeForInstaller(this, javaVersion)" not in java_gui:
+    raise SystemExit("Shared Java runtime selection was not connected to installer execution.")
+PY
+
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
