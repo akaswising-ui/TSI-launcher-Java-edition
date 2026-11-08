@@ -66,7 +66,10 @@ class JavaGameInstaller(
         ensureAsmCoreLibrary(metadata)
 
         val metadataFile = File(paths.versionDirectory, "${version.id}.json")
-        writeAtomically(metadataFile, metadataText.toByteArray(Charsets.UTF_8))
+        // Persist the normalized metadata, not the original response text.
+        // ensureAsmCoreLibrary() may have added a missing classpath dependency;
+        // Amethyst reads this on-disk JSON later when it constructs the JVM classpath.
+        writeAtomically(metadataFile, metadata.toString(2).toByteArray(Charsets.UTF_8))
 
         val client = metadata.optJSONObject("downloads")
             ?.optJSONObject("client")
