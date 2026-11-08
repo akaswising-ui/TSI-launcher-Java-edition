@@ -316,6 +316,37 @@ main_menu_path.write_text(main_menu)
 if "hasOnlineProfile()" in new_modpack_gate or "hasNoOnlineProfileDialog" in new_modpack_gate:
     raise SystemExit("Modpack installer still has an online-account gate.")
 
+# Opening a local game folder is a file-manager operation, not an entitlement
+# check. Keep the Demo-specific warning but allow normal offline accounts.
+main_menu = main_menu_path.read_text()
+old_directory_gate = """        mOpenDirectoryButton.setOnClickListener((v)-> {
+            if (Tools.isDemoProfile(v.getContext())){ // Say a different message when on demo profile since they might see the hidden demo folder
+                hasNoOnlineProfileDialog(getActivity(), getString(R.string.demo_unsupported), getString(R.string.change_account));
+            } else if (!hasOnlineProfile()) { // Otherwise display the generic pop-up to log in
+                hasNoOnlineProfileDialog(requireActivity());
+            } else openPath(v.getContext(), getCurrentProfileDirectory(), false);
+
+        });"""
+new_directory_gate = """        mOpenDirectoryButton.setOnClickListener((v)-> {
+            if (Tools.isDemoProfile(v.getContext())) {
+                hasNoOnlineProfileDialog(getActivity(), getString(R.string.demo_unsupported), getString(R.string.change_account));
+            } else {
+                openPath(v.getContext(), getCurrentProfileDirectory(), false);
+            }
+        });"""
+main_menu = replace_once(
+    main_menu,
+    old_directory_gate,
+    new_directory_gate,
+    "offline-compatible game-directory access",
+)
+# The main-menu account gates are no longer used for local file/mod operations.
+main_menu = main_menu.replace("import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;\\n", "")
+main_menu_path.write_text(main_menu)
+
+if "hasOnlineProfile()" in main_menu or "hasNoOnlineProfileDialog(requireActivity())" in main_menu:
+    raise SystemExit("Main menu still gates local file/mod operations on Microsoft ownership.")
+
 main_menu = main_menu_path.read_text()
 main_menu = replace_once(
     main_menu,
