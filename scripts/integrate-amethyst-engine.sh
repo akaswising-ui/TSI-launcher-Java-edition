@@ -724,7 +724,11 @@ new_picker = """        String runtime = getSelectedRuntime(minecraftProfile);
             runtime = preferredRuntime;
         }"""
 tools = replace_once(tools, old_picker, new_picker, "runtime auto-picker and stale-cache fix")
-tools_path.write_text(tools)
+endAnchor
+if "No compatible Android Java runtime found for Minecraft Java " not in tools:
+    raise SystemExit("Robust Java runtime auto-picker was not integrated.")
+if "LauncherProfiles.write();" not in tools:
+    raise SystemExit("Selected Java runtime is not persisted to the active launcher profile.")
 
 # NewJREUtil can have no candidates on unsupported/offline devices. Check for
 # that case before reading selectedRankedRuntime.value.
