@@ -243,10 +243,14 @@ auto_launch_resume = """    protected void onResume() {
         boolean openModloaderManager = getIntent().getBooleanExtra("tsi_open_modloader_manager", false);
         boolean openEngineSettings = getIntent().getBooleanExtra("tsi_open_engine_settings", false);
         boolean openAccountManager = getIntent().getBooleanExtra("tsi_open_account_manager", false);
-        if (openModloaderManager || openEngineSettings || openAccountManager) {
+        boolean openGamepadMapper = getIntent().getBooleanExtra("tsi_open_gamepad_mapper", false);
+        boolean openModJarInstaller = getIntent().getBooleanExtra("tsi_open_mod_jar_installer", false);
+        if (openModloaderManager || openEngineSettings || openAccountManager || openGamepadMapper || openModJarInstaller) {
             getIntent().removeExtra("tsi_open_modloader_manager");
             getIntent().removeExtra("tsi_open_engine_settings");
             getIntent().removeExtra("tsi_open_account_manager");
+            getIntent().removeExtra("tsi_open_gamepad_mapper");
+            getIntent().removeExtra("tsi_open_mod_jar_installer");
             getWindow().getDecorView().post(() -> {
                 if (openModloaderManager) {
                     Tools.swapFragment(this,
@@ -256,6 +260,12 @@ auto_launch_resume = """    protected void onResume() {
                     Tools.swapFragment(this,
                             net.kdt.pojavlaunch.prefs.screens.LauncherPreferenceFragment.class,
                             SETTING_FRAGMENT_TAG, null);
+                } else if (openGamepadMapper) {
+                    Tools.swapFragment(this,
+                            net.kdt.pojavlaunch.fragments.GamepadMapperFragment.class,
+                            net.kdt.pojavlaunch.fragments.GamepadMapperFragment.TAG, null);
+                } else if (openModJarInstaller) {
+                    modInstallerLauncher.launch(null);
                 } else {
                     Tools.swapFragment(this,
                             net.kdt.pojavlaunch.fragments.SelectAuthFragment.class,

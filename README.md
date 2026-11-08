@@ -27,7 +27,8 @@ TSI embeds the pinned Amethyst Android engine rather than reimplementing a deskt
 - **Versions and runtime:** TSI's catalogue, complete client/library/asset installer and Java 8/17/21/25 Android runtime packages connect to Amethyst's MultiRT/JVM pipeline.
 - **Mod loaders:** Forge, Fabric, Quilt, NeoForge and OptiFine installer paths remain in the embedded engine. TSI's integration adds shared runtime selection and inherited vanilla-version resolution.
 - **Modpacks:** The TSI Mod Pack screen now uses the embedded Modrinth + CurseForge APIs for live search, version selection, installation, and ZIP/MRPACK import. It no longer displays sample preview packs.
-- **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. They have not all been duplicated as Compose settings panels.
+- **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. TSI Settings provides direct shortcuts to the original touch-control editor and gamepad mapper, plus the advanced renderer/video/JVM preferences. The Compose UI does not duplicate the native engine systems.
+- **JAR mods:** TSI Settings can open Amethyst's original JAR mod installer; Modrinth/CurseForge search and ZIP/MRPACK import remain in the TSI Mod Pack screen.
 - **Accounts:** Microsoft sign-in and local/offline profiles both use Amethyst's original account system. TSI's account action opens the native account selector; it does not collect Microsoft passwords in its own Compose UI. Offline profiles do not grant authenticated-server access or bypass ownership checks.
 
 The TSI dashboard and the original Amethyst launcher entry remain separate screens. A successful build confirms packaging and compilation, not gameplay on every Android ABI/GPU or every Minecraft release.

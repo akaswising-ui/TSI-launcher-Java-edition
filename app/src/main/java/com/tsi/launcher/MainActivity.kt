@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1479,6 +1480,54 @@ private fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("OPEN ADVANCED ENGINE SETTINGS")
+                }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            AmethystEngineBridge.openCustomControlsEditor(context)
+                        }.onFailure { error ->
+                            Toast.makeText(
+                                context,
+                                "Could not open touch controls: ${error.message ?: "engine unavailable"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("EDIT TOUCH CONTROLS")
+                }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            AmethystEngineBridge.openGamepadMapper(context)
+                        }.onFailure { error ->
+                            Toast.makeText(
+                                context,
+                                "Could not open gamepad mapper: ${error.message ?: "engine unavailable"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("CONFIGURE GAMEPAD")
+                }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            AmethystEngineBridge.openModJarInstaller(context)
+                        }.onFailure { error ->
+                            Toast.makeText(
+                                context,
+                                "Could not open mod installer: ${error.message ?: "engine unavailable"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("INSTALL MOD JAR")
                 }
             }
         }

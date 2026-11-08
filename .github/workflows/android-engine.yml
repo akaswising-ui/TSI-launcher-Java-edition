@@ -164,8 +164,18 @@ jobs:
               "Importing modpack archive...",
               "OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS",
               "OPEN ADVANCED ENGINE SETTINGS",
+              "EDIT TOUCH CONTROLS",
+              "CONFIGURE GAMEPAD",
+              "INSTALL MOD JAR",
+              "openCustomControlsEditor",
+              "openGamepadMapper",
+              "openModJarInstaller",
               "tsi_open_modloader_manager",
               "tsi_open_engine_settings",
+              "tsi_open_gamepad_mapper",
+              "tsi_open_mod_jar_installer",
+              "Lnet/kdt/pojavlaunch/CustomControlsActivity;",
+              "Lnet/kdt/pojavlaunch/fragments/GamepadMapperFragment;",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:

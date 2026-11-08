@@ -304,6 +304,44 @@ object AmethystEngineBridge {
         }
     }
 
+    /**
+     * Open Amethyst's built-in custom touch-control editor from the TSI dashboard.
+     * Install the bundled default layout only when no usable user layout exists.
+     */
+    fun openCustomControlsEditor(context: Context) {
+        ensureDefaultControlMap(context)
+        val intent = Intent().setClassName(
+            context,
+            "net.kdt.pojavlaunch.CustomControlsActivity"
+        )
+        if (context !is Activity) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    /** Open Amethyst's original .jar mod installer and its document picker. */
+    fun openModJarInstaller(context: Context) {
+        val intent = Intent()
+            .setClassName(context, LAUNCHER_ACTIVITY)
+            .putExtra("tsi_open_mod_jar_installer", true)
+        if (context !is Activity) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    /** Open the original Amethyst gamepad remapper through its launcher activity. */
+    fun openGamepadMapper(context: Context) {
+        val intent = Intent()
+            .setClassName(context, LAUNCHER_ACTIVITY)
+            .putExtra("tsi_open_gamepad_mapper", true)
+        if (context !is Activity) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
     fun launch(
         context: Context,
         versionId: String,
