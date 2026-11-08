@@ -137,7 +137,9 @@ object AmethystEngineBridge {
         val preferences = context.getSharedPreferences("tsi_launcher_preferences", Context.MODE_PRIVATE)
         val currentName = context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
             .getString(PROFILE_PREF_FILE, null)?.trim()
-        if (!currentName.isNullOrBlank() && isLocalAccountFile(context, currentName)) {
+        if (!currentName.isNullOrBlank() &&
+            (isLocalAccountFile(context, currentName) || selectedAccountIsMicrosoft(context))
+        ) {
             val username = readAccountUsername(context, currentName) ?: currentName
             preferences.edit().putString("profile_name", username).apply()
             return username
@@ -181,6 +183,7 @@ object AmethystEngineBridge {
     /** Returns the current account channel for the dashboard status pill. */
     fun selectedAccountMode(context: Context): String = when {
         selectedAccountUsername(context) == null -> "No account"
+        selectedAccountIsMicrosoft(context) -> "Microsoft"
         selectedAccountIsLocal(context) -> "Offline"
         else -> "No account"
     }

@@ -23,8 +23,12 @@ The TSI repository adds a separate Compose dashboard and adapters. It should not
 | Touch / keyboard / mouse / gamepad | Native input and custom control maps | Engine input and control implementation retained |
 | Renderer/video options | Upstream preference screens | Still available in embedded engine settings; not all have duplicate TSI Compose controls |
 | Logs, game folders and file operations | Engine facilities | TSI per-version data folders plus engine facilities |
-| Microsoft online authentication | Supported by upstream flow | Disabled in this offline-account-focused TSI configuration |
+| Microsoft online authentication | Supported by upstream flow | Available through the original Amethyst account selector and Microsoft login fragment |
 | Bedrock Edition | Not part of the Java engine | Separate TSI Bedrock repository / app integration |
+
+## Account compatibility
+
+The TSI dashboard's existing profile-plus action opens Amethyst's original account selector. Microsoft OAuth sign-in, refresh and local/offline account creation stay in the upstream implementation; TSI does not substitute a custom password form. The selected Microsoft account is preserved across TSI startup and launch-profile preparation.
 
 ## TSI dashboard access to preserved engine features
 
