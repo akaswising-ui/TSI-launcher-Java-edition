@@ -122,7 +122,7 @@ fun buildRuntimeArguments(
 
 This argument shape explains version metadata, but TSI does not run Minecraft with a desktop-style `java -jar client.jar` command. `AmethystEngineBridge` validates the Android JRE and shared game-data root, prepares the Amethyst profile, and hands off to Amethyst's normal Android launch pipeline. Amethyst owns JVM startup, LWJGL 2 compatibility and LWJGL 3, SDL/display surface, OpenAL audio, renderer lifecycle and touch/keyboard/mouse/gamepad input. TSI checks the version's required Java major before handing off.
 
-The PojavLauncher repository has been discontinued and identifies Amethyst Android as its successor. Amethyst is the preferred research/integration target, not a drop-in Gradle dependency. Before importing or linking source, inspect the exact upstream commit, submodules, native build toolchain and each dependency's license. Keep license notices and implement TSI integration as an adapter. Do not describe TSI's current Java tab as capable of launching games until this bridge is in place.
+The original PojavLauncher home is retained in the APK, while TSI's Compose dashboard connects to the pinned Amethyst Android engine through `AmethystEngineBridge`. The engine is built from a pinned upstream revision and initialized by the engine workflow; it is not added as a desktop Java dependency. Keep the upstream source, submodules, native build toolchain and license notices intact when updating the pinned revision. The launcher hand-off and Android-native compatibility still need testing on actual devices and Minecraft versions.
 
 ## 4. Version isolation and storage
 
