@@ -53,6 +53,7 @@ import com.tsi.launcher.runtime.AndroidJreInstaller
 import com.tsi.launcher.runtime.JavaRuntimeManager
 import com.tsi.launcher.runtime.VersionVmInspection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -91,16 +92,26 @@ fun VirtualMachineControllerScreen(
         }
         scope.launch {
             scanning = true
+            inspection = null
             controllerMessage = "Checking version files, JREs, libraries and assets…"
-            inspection = withContext(Dispatchers.IO) {
-                manager.inspect(versionId, runtimePreference)
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    manager.inspect(versionId, runtimePreference)
+                }
+                inspection = result
+                controllerMessage = if (result.readyToLaunch) {
+                    "All launch checks passed. VM engine is ready."
+                } else {
+                    "VM is stopped. Some launch requirements are missing."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                inspection = null
+                controllerMessage = "VM inspection failed: ${error.message ?: error.javaClass.simpleName}"
+            } finally {
+                scanning = false
             }
-            controllerMessage = if (inspection?.readyToLaunch == true) {
-                "All launch checks passed. VM engine is ready."
-            } else {
-                "VM is stopped. Some launch requirements are missing."
-            }
-            scanning = false
         }
     }
 

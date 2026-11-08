@@ -224,42 +224,52 @@ class JavaRuntimeManager(private val context: Context) {
 
     private fun scanRuntimes(): List<DetectedJavaRuntime> {
         migrateLegacyRuntimes()
+        val canonicalRoot = runCatching { amethystRuntimeRoot.canonicalFile }.getOrNull()
+            ?: return emptyList()
+        val rootPrefix = canonicalRoot.path + File.separator
         val entries = amethystRuntimeRoot.listFiles()
-            ?.filter { it.isDirectory && File(it, "release").isFile }
+            ?.filter { it.isDirectory && runCatching { it.canonicalPath.startsWith(rootPrefix) }.getOrDefault(false) }
             .orEmpty()
 
+        // One corrupt or partially extracted JRE must not abort discovery of all
+        // other installed runtimes. Validate every folder independently.
         return entries.mapNotNull { directory ->
-            // MultiRTUtils reads exactly runtimes/<name>/release. A nested
-            // runtimes/<name>/jre/release folder is not visible to Amethyst.
-            val home = directory
-            val releaseFile = File(home, "release")
-            val properties = parseRelease(releaseFile)
-            val versionText = properties["JAVA_VERSION"].orEmpty().trim('"')
-            val major = parseJavaMajor(versionText) ?: return@mapNotNull null
-            val arch = properties["OS_ARCH"].orEmpty().trim('"')
-            val jvmCandidates = listOf(
-                File(home, "lib/server/libjvm.so"),
-                File(home, "lib/client/libjvm.so"),
-                File(home, "lib/amd64/server/libjvm.so"),
-                File(home, "lib/amd64/client/libjvm.so"),
-                File(home, "lib/aarch64/server/libjvm.so"),
-                File(home, "lib/aarch64/client/libjvm.so"),
-                File(home, "lib/arm/server/libjvm.so"),
-                File(home, "lib/arm/client/libjvm.so"),
-                File(home, "lib/x86_64/server/libjvm.so"),
-                File(home, "lib/x86/server/libjvm.so")
-            )
-            val jvm = jvmCandidates.firstOrNull { it.isFile } ?: return@mapNotNull null
-            if (!isDeviceCompatible(arch)) return@mapNotNull null
+            runCatching {
+                // Amethyst MultiRT needs runtimes/<name>/release at the top level.
+                val home = directory.canonicalFile
+                if (!home.path.startsWith(rootPrefix)) return@runCatching null
+                val releaseFile = File(home, "release")
+                if (!releaseFile.isFile) return@runCatching null
+                val properties = parseRelease(releaseFile)
+                val versionText = properties["JAVA_VERSION"].orEmpty().trim('"')
+                val major = parseJavaMajor(versionText) ?: return@runCatching null
+                val arch = properties["OS_ARCH"].orEmpty().trim('"')
+                val jvmCandidates = listOf(
+                    File(home, "lib/server/libjvm.so"),
+                    File(home, "lib/client/libjvm.so"),
+                    File(home, "lib/$arch/server/libjvm.so"),
+                    File(home, "lib/$arch/client/libjvm.so"),
+                    File(home, "lib/amd64/server/libjvm.so"),
+                    File(home, "lib/amd64/client/libjvm.so"),
+                    File(home, "lib/aarch64/server/libjvm.so"),
+                    File(home, "lib/aarch64/client/libjvm.so"),
+                    File(home, "lib/arm/server/libjvm.so"),
+                    File(home, "lib/arm/client/libjvm.so"),
+                    File(home, "lib/x86_64/server/libjvm.so"),
+                    File(home, "lib/x86/server/libjvm.so")
+                )
+                val jvm = jvmCandidates.firstOrNull { it.isFile } ?: return@runCatching null
+                if (!isDeviceCompatible(arch)) return@runCatching null
 
-            DetectedJavaRuntime(
-                name = directory.name,
-                majorVersion = major,
-                version = versionText,
-                architecture = arch,
-                home = home,
-                jvmLibrary = jvm
-            )
+                DetectedJavaRuntime(
+                    name = directory.name,
+                    majorVersion = major,
+                    version = versionText,
+                    architecture = arch,
+                    home = home,
+                    jvmLibrary = jvm
+                )
+            }.getOrNull()
         }.sortedBy { it.majorVersion }
     }
 
