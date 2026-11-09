@@ -9,6 +9,21 @@ import java.security.MessageDigest
 
 class MinecraftAssetLayoutTest {
     @Test
+    fun sameSizeCorruptObjectFailsSha1Verification() {
+        val root = Files.createTempDirectory("tsi-asset-sha").toFile()
+        try {
+            val file = File(root, "object.bin")
+            file.writeBytes("correct".toByteArray())
+            val expected = sha1("correct".toByteArray())
+            assertTrue(MinecraftAssetLayout.hasExpectedSha1(file, expected))
+            file.writeBytes("corrupt".toByteArray()) // Same length, wrong digest.
+            assertTrue(!MinecraftAssetLayout.hasExpectedSha1(file, expected))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun duplicateAssetHashesAreDownloadedOnlyOnce() {
         val entries = listOf(
             "textures/gui/icons.png" to "abc",
