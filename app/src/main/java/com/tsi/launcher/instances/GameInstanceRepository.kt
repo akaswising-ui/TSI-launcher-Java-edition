@@ -357,6 +357,61 @@ class GameInstanceRepository(context: Context) {
         }
     }
 
+    /**
+     * Adopt a modpack installed by Amethyst's Modrinth/CurseForge installer.
+     * That installer writes to <game-home>/custom_instances; TSI instances
+     * live under .minecraft/instances. Copy first, then remove the old folder
+     * only after every file has been copied successfully.
+     */
+    @Synchronized
+    fun importInstalledModpack(
+        name: String,
+        versionId: String,
+        profileGameDirectory: String
+    ): GameInstance {
+        requireSafeVersion(versionId)
+        val relative = profileGameDirectory.replace('\\', '/')
+            .removePrefix("./")
+            .trimStart('/')
+        val parts = relative.split('/')
+        if (parts.size < 2 || parts.first() != "custom_instances" ||
+            parts.any { it.isBlank() || it == "." || it == ".." || it.contains(':') }
+        ) {
+            throw IOException("The installed modpack profile points outside custom_instances.")
+        }
+
+        val gameHome = minecraftRoot.parentFile ?: minecraftRoot
+        val customRoot = File(gameHome, "custom_instances").canonicalFile
+        val source = safeChild(gameHome, relative)
+        if (!source.isDirectory ||
+            !source.canonicalFile.path.startsWith(customRoot.path + File.separator)
+        ) {
+            throw IOException("The installed modpack data directory was not found.")
+        }
+
+        val created = createInternal(validateName(name), versionId, false, false)
+        copyTree(source, created.gameDirectory)
+
+        val versionMetadataFile = File(
+            File(File(minecraftRoot, "versions"), versionId),
+            "$versionId.json"
+        )
+        val baseVersion = runCatching {
+            if (!versionMetadataFile.isFile) versionId
+            else JSONObject(versionMetadataFile.readText(Charsets.UTF_8))
+                .optString("inheritsFrom")
+                .takeIf { it.isNotBlank() }
+                ?: versionId
+        }.getOrDefault(versionId)
+
+        val completed = created.copy(minecraftVersion = baseVersion)
+        writeInstance(completed)
+        select(completed.id)
+        // Source remains intact if the transfer or metadata write failed.
+        deleteTree(source)
+        return completed
+    }
+
     private fun createInternal(
         name: String,
         versionId: String,
