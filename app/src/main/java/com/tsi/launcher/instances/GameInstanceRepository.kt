@@ -23,7 +23,11 @@ data class GameInstance(
     val loaderId: String?,
     val loaderVersion: String?,
     val createdAt: Long,
-    val gameDirectory: File
+    val gameDirectory: File,
+    val rendererId: String? = null,
+    val javaArgs: String? = null,
+    val selectedRuntime: String? = null,
+    val controlLayout: String? = null
 )
 
 /**
@@ -120,6 +124,30 @@ class GameInstanceRepository(context: Context) {
     fun setPinned(id: String, pinned: Boolean): GameInstance {
         val current = readInstance(instanceRoot(id)) ?: throw IOException("Instance not found.")
         return current.copy(pinned = pinned).also(::writeInstance)
+    }
+
+    @Synchronized
+    fun updateLaunchSettings(
+        id: String,
+        rendererId: String?,
+        javaArgs: String?,
+        selectedRuntime: String?,
+        controlLayout: String?
+    ): GameInstance {
+        val current = readInstance(instanceRoot(id)) ?: throw IOException("Instance not found.")
+        val safeRenderer = optionalIdentifier(rendererId, "renderer ID", 80)
+        val safeRuntime = optionalIdentifier(selectedRuntime, "runtime name", 80)
+        val safeControl = optionalIdentifier(controlLayout?.removeSuffix(".json"), "control layout name", 100)
+        val safeArgs = javaArgs?.trim()?.takeIf { it.isNotBlank() }
+        require(safeArgs == null || (safeArgs.length <= 8192 && !safeArgs.contains('\u0000'))) {
+            "Java arguments must be no longer than 8192 characters."
+        }
+        return current.copy(
+            rendererId = safeRenderer,
+            javaArgs = safeArgs,
+            selectedRuntime = safeRuntime,
+            controlLayout = safeControl
+        ).also(::writeInstance)
     }
 
     @Synchronized
@@ -236,7 +264,13 @@ class GameInstanceRepository(context: Context) {
                 val completed = created.copy(
                     minecraftVersion = minecraftVersion,
                     loaderId = loader?.first,
-                    loaderVersion = loader?.second
+                    loaderVersion = loader?.second,
+                    rendererId = config["TSI_Renderer"],
+                    javaArgs = config["JavaArgs"]?.takeIf {
+                        !it.isBlank() && !config["OverrideJavaArgs"].equals("false", ignoreCase = true)
+                    },
+                    selectedRuntime = config["TSI_Runtime"],
+                    controlLayout = config["TSI_ControlLayout"]
                 )
                 writeInstance(completed)
                 select(completed.id)
@@ -261,8 +295,19 @@ class GameInstanceRepository(context: Context) {
 
         try {
             ZipOutputStream(BufferedOutputStream(FileOutputStream(temporary))).use { zip ->
-                val config = "InstanceType=OneSix\nname=" + instance.name +
-                    "\nIntendedVersion=" + instance.minecraftVersion + "\n"
+                val configLines = mutableListOf(
+                    "InstanceType=OneSix",
+                    "name=" + instance.name,
+                    "IntendedVersion=" + instance.minecraftVersion
+                )
+                instance.javaArgs?.let {
+                    configLines += "OverrideJavaArgs=true"
+                    configLines += "JavaArgs=" + it.replace("\n", " ").replace("\r", " ")
+                }
+                instance.rendererId?.let { configLines += "TSI_Renderer=" + it }
+                instance.selectedRuntime?.let { configLines += "TSI_Runtime=" + it }
+                instance.controlLayout?.let { configLines += "TSI_ControlLayout=" + it }
+                val config = configLines.joinToString("\n", postfix = "\n")
                 addTextEntry(zip, "instance.cfg", config)
 
                 val components = JSONArray().put(
@@ -328,7 +373,11 @@ class GameInstanceRepository(context: Context) {
                 loaderId = json.optString("loaderId").takeIf { it.isNotBlank() },
                 loaderVersion = json.optString("loaderVersion").takeIf { it.isNotBlank() },
                 createdAt = json.optLong("createdAt", folder.lastModified()),
-                gameDirectory = game
+                gameDirectory = game,
+                rendererId = json.optString("rendererId").takeIf { it.isNotBlank() },
+                javaArgs = json.optString("javaArgs").takeIf { it.isNotBlank() },
+                selectedRuntime = json.optString("selectedRuntime").takeIf { it.isNotBlank() },
+                controlLayout = json.optString("controlLayout").takeIf { it.isNotBlank() }
             )
         }.getOrNull()
     }
@@ -347,6 +396,10 @@ class GameInstanceRepository(context: Context) {
             .put("createdAt", instance.createdAt)
             .put("loaderId", instance.loaderId ?: "")
             .put("loaderVersion", instance.loaderVersion ?: "")
+            .put("rendererId", instance.rendererId ?: "")
+            .put("javaArgs", instance.javaArgs ?: "")
+            .put("selectedRuntime", instance.selectedRuntime ?: "")
+            .put("controlLayout", instance.controlLayout ?: "")
         writeAtomically(File(folder, META_FILE), json.toString(2))
     }
 
@@ -504,6 +557,15 @@ class GameInstanceRepository(context: Context) {
         val base = instancesRoot.canonicalFile
         if (!folder.path.startsWith(base.path + File.separator)) throw IOException("Invalid instance ID.")
         return folder
+    }
+
+    private fun optionalIdentifier(value: String?, label: String, maxLength: Int): String? {
+        val trimmed = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        require(trimmed.length <= maxLength &&
+            trimmed.matches(Regex("[A-Za-z0-9._+-]+")) &&
+            trimmed != "." && trimmed != ".."
+        ) { "Invalid $label." }
+        return trimmed
     }
 
     private fun safeSegment(value: String): String {
