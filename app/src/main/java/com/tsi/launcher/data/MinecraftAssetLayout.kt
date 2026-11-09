@@ -38,7 +38,13 @@ object MinecraftAssetLayout {
         if (!virtualAssets && !mapToResources) return 0
 
         val objectRoot = File(assetsRoot, "objects").canonicalFile
-        val targetRoot = (if (mapToResources) resourcesRoot else assetsRoot).canonicalFile
+        val targetRoot = (
+            when {
+                mapToResources -> resourcesRoot
+                virtualAssets -> File(assetsRoot, "virtual/legacy")
+                else -> assetsRoot
+            }
+        ).canonicalFile
         ensureDirectory(targetRoot)
 
         var materialized = 0
