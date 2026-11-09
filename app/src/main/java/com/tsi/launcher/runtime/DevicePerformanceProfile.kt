@@ -20,25 +20,32 @@ object DevicePerformanceProfile {
         return (info.totalMem / (1024L * 1024L)).toInt().coerceAtLeast(1024)
     }
 
-    fun recommendedHeapMb(context: Context): Int {
-        val totalMb = totalPhysicalRamMb(context)
-        return when {
-            totalMb >= 7680 -> 2048
-            totalMb >= 4608 -> 1536
-            else -> 1024
-        }
+    fun recommendedHeapMb(context: Context): Int =
+        recommendedHeapMbFor(totalPhysicalRamMb(context))
+
+    fun maxHeapMb(context: Context): Int =
+        maxHeapMbFor(totalPhysicalRamMb(context))
+
+    fun clampHeap(context: Context, requestedMb: Int): Int =
+        clampHeapFor(totalPhysicalRamMb(context), requestedMb)
+
+    /** Pure helpers keep the RAM policy testable without an Android device. */
+    internal fun recommendedHeapMbFor(totalMb: Int): Int = when {
+        totalMb >= 7680 -> 2048
+        totalMb >= 4608 -> 1536
+        totalMb >= 3584 -> 1024
+        totalMb >= 2816 -> 768
+        else -> 512
     }
 
-    fun maxHeapMb(context: Context): Int {
-        val totalMb = totalPhysicalRamMb(context)
-        return when {
-            totalMb >= 7680 -> 3072
-            totalMb >= 4608 -> 2048
-            else -> 1536
-        }
+    internal fun maxHeapMbFor(totalMb: Int): Int = when {
+        totalMb >= 7680 -> 3072
+        totalMb >= 4608 -> 2048
+        totalMb >= 3584 -> 1536
+        totalMb >= 2816 -> 1024
+        else -> 768
     }
 
-    fun clampHeap(context: Context, requestedMb: Int): Int {
-        return requestedMb.coerceIn(512, maxHeapMb(context))
-    }
+    internal fun clampHeapFor(totalMb: Int, requestedMb: Int): Int =
+        requestedMb.coerceIn(512, maxHeapMbFor(totalMb))
 }

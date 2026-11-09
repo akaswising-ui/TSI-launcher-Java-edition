@@ -76,6 +76,9 @@ jobs:
           }
           KOTLIN
 
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest
+
       - name: Build debug APK
         run: gradle :app:assembleDebug
 

@@ -17,7 +17,7 @@ The original Amethyst/Pojav launcher home remains the Android app entry screen. 
 - Microsoft account sign-in through Amethyst's existing authentication flow, plus local/offline profiles. TSI preserves an already-selected Microsoft account across startup; a local profile is created only when no valid account is selected.
 - VM preflight checks before launch.
 
-The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The direct Java Edition download is [app-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/app-debug.apk). This release asset is produced by the engine workflow, not the dashboard-only shell workflow. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
+The engine-integrated debug APK is assembled by `.github/workflows/android-engine.yml` using the pinned Amethyst Android revision. The current direct Java Edition download is [TSI-Launcher-engine-debug.apk](https://github.com/akaswising-ui/TSI-launcher-Java-edition/releases/download/android-debug-latest/TSI-Launcher-engine-debug.apk). Do not use the dashboard-only `TSI-dashboard-shell-smoke-only` artifact for gameplay. A successful CI build verifies APK packaging, the app ID and the original Pojav launcher entry. It does **not** prove that every historical Minecraft version will run on every phone; renderer, LWJGL, native-library and Java-version requirements vary by release.
 
 ## Feature parity with the Pojav/Amethyst engine
 
@@ -32,15 +32,17 @@ TSI embeds the pinned Amethyst Android engine rather than reimplementing a deskt
 
 The TSI dashboard and the original Amethyst launcher entry remain separate screens. A successful build confirms packaging and compilation, not gameplay on every Android ABI/GPU or every Minecraft release.
 
-## Vivo Y22 / 6 GB RAM profile
+## Device-based Java heap limits
 
-The launcher reads Android's reported physical RAM and selects a conservative heap target:
-- Recommended heap on a 6 GB-class device: **1536 MB**.
-- Maximum heap on a 6 GB-class device: **2048 MB**.
+The launcher reads Android's reported physical RAM and applies a conservative Java heap budget:
+- Up to 2.8 GB physical RAM: **512 MB recommended / 768 MB maximum**.
+- 2.8–3.5 GB physical RAM: **768 MB recommended / 1024 MB maximum**.
+- 3.5–4.5 GB physical RAM: **1024 MB recommended / 1536 MB maximum**.
+- 4.5–7.5 GB physical RAM: **1536 MB recommended / 2048 MB maximum**.
+- 7.5 GB or more: **2048 MB recommended / 3072 MB maximum**.
 - Older saved values above the device limit are clamped before the JVM starts.
-- The remaining memory is left for Android, the launcher, native graphics/audio libraries and the game process.
 
-Heap size is not the same as total game memory. Minecraft and its native renderer also use memory outside the Java heap. These settings reduce avoidable memory pressure; they cannot guarantee that every version or modpack fits.
+The lower profile avoids assigning too much of a 2 GB phone's memory to the Java heap while Android, SDL, LWJGL, graphics and audio still need RAM. Heap size is not total game memory. Very recent Minecraft versions and large modpacks may still exceed what a low-memory phone can run.
 
 ## Storage layout
 
@@ -69,7 +71,7 @@ The CI workflow checks out the pinned upstream Amethyst Android source, applies 
 ./gradlew :app_pojavlauncher:assembleDebug
 ```
 
-The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-day Actions artifact, and published as `app-debug.apk` in the `android-debug-latest` Release. The separate `TSI-dashboard-shell-smoke-only` artifact is only a Compose compile check and does not contain the Minecraft game engine. Do not install it as the playable launcher.
+The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-day Actions artifact, and published under that same filename in the `android-debug-latest` Release. The separate `TSI-dashboard-shell-smoke-only` artifact is only a Compose compile check and does not contain the Minecraft game engine. Do not install it as the playable launcher.
 
 ## Scope and compatibility
 
