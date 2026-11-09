@@ -951,6 +951,94 @@ if "ensureRuntimeForInstaller(this, javaVersion)" not in java_gui:
     raise SystemExit("Shared Java runtime selection was not connected to installer execution.")
 PY
 
+# Defer account/settings fragment navigation if Android has already saved the Activity state.
+# The account spinner can emit SELECT_AUTH_METHOD after onSaveInstanceState(); an
+# immediate FragmentTransaction.commit() then throws "Can not perform this action
+# after onSaveInstanceState". Wait for the next RESUME and retry on the UI thread.
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+tools_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/Tools.java"
+source = tools_path.read_text()
+
+old = """    /** Swap the main fragment with another */
+    public static void swapFragment(FragmentActivity fragmentActivity , Class<? extends Fragment> fragmentClass,
+                                    @Nullable String fragmentTag, @Nullable Bundle bundle) {
+        // When people tab out, it might happen
+        //TODO handle custom animations
+        fragmentActivity.getSupportFragmentManager().beginTransaction()
+                .setReorderingAllowed(true)
+                .addToBackStack(fragmentClass.getName())
+                .replace(R.id.container_fragment, fragmentClass, bundle, fragmentTag).commit();
+    }"""
+
+new = """    /** Swap the main fragment with another, deferring safely across saved Activity state. */
+    public static void swapFragment(FragmentActivity fragmentActivity , Class<? extends Fragment> fragmentClass,
+                                    @Nullable String fragmentTag, @Nullable Bundle bundle) {
+        if (fragmentActivity == null || fragmentActivity.isFinishing() || fragmentActivity.isDestroyed()) {
+            return;
+        }
+
+        // Fragment transactions must run on the main thread.
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            fragmentActivity.runOnUiThread(() -> swapFragment(fragmentActivity, fragmentClass, fragmentTag, bundle));
+            return;
+        }
+
+        androidx.fragment.app.FragmentManager fragmentManager =
+                fragmentActivity.getSupportFragmentManager();
+
+        // Account spinner callbacks may arrive after onSaveInstanceState().
+        // Do not use commitAllowingStateLoss(): keep the requested navigation and
+        // replay it only after FragmentManager has resumed and cleared saved state.
+        if (fragmentManager.isStateSaved()) {
+            androidx.lifecycle.LifecycleEventObserver retryOnResume =
+                    new androidx.lifecycle.LifecycleEventObserver() {
+                @Override
+                public void onStateChanged(androidx.lifecycle.LifecycleOwner owner,
+                                           androidx.lifecycle.Lifecycle.Event event) {
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_DESTROY) {
+                        owner.getLifecycle().removeObserver(this);
+                        return;
+                    }
+                    if (event != androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        return;
+                    }
+
+                    owner.getLifecycle().removeObserver(this);
+                    fragmentActivity.getWindow().getDecorView().post(() -> {
+                        if (!fragmentActivity.isFinishing() && !fragmentActivity.isDestroyed()) {
+                            swapFragment(fragmentActivity, fragmentClass, fragmentTag, bundle);
+                        }
+                    });
+                }
+            };
+            fragmentActivity.getLifecycle().addObserver(retryOnResume);
+            return;
+        }
+
+        //TODO handle custom animations
+        fragmentManager.beginTransaction()
+                .setReorderingAllowed(true)
+                .addToBackStack(fragmentClass.getName())
+                .replace(R.id.container_fragment, fragmentClass, bundle, fragmentTag).commit();
+    }"""
+
+count = source.count(old)
+if count != 1:
+    raise SystemExit(f"Expected exactly one original Tools.swapFragment implementation; found {count}")
+if "retryOnResume" in source:
+    raise SystemExit("Lifecycle-safe swapFragment patch appears to be applied already.")
+source = source.replace(old, new, 1)
+tools_path.write_text(source)
+
+# Build-time assertion: the unsafe unconditional commit must not return.
+if "if (fragmentManager.isStateSaved())" not in source or "retryOnResume" not in source:
+    raise SystemExit("Lifecycle-safe fragment navigation was not integrated.")
+PY
+
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
