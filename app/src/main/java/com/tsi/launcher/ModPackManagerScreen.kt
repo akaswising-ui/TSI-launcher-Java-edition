@@ -481,13 +481,44 @@ fun ModPackManagerScreen(
                     onClick = {
                         val detail = selectedDetail
                         if (detail != null && selectedVersion in detail.versionNames.indices) {
-                            try {
-                                api.handleInstallation(appContext, detail, selectedVersion)
-                                statusMessage = "Modpack installation queued. Forge/NeoForge may prompt for their installer through a notification."
-                                selectedItem = null
-                                selectedDetail = null
-                            } catch (error: Exception) {
-                                statusMessage = error.message ?: "Could not start modpack installation."
+                            scope.launch {
+                                importing = true
+                                statusMessage = "Downloading and installing modpack…"
+                                try {
+                                    val imported = withContext(Dispatchers.IO) {
+                                        LauncherProfiles.load()
+                                        val previousKeys = LauncherProfiles.mainProfileJson.profiles.keys.toSet()
+                                        val loader = api.installMod(detail, selectedVersion)
+                                        if (loader != null) {
+                                            val task = loader.getDownloadTask(
+                                                NotificationDownloadListener(appContext, loader)
+                                            )
+                                            task?.run()
+                                        }
+                                        LauncherProfiles.load()
+                                        val (name, version, gameDirectory) = findNewAmethystProfile(previousKeys)
+                                        val instance = instanceRepository.importInstalledModpack(
+                                            name,
+                                            version,
+                                            gameDirectory
+                                        )
+                                        instance to loader
+                                    }
+                                    onInstanceImported(imported.first)
+                                    statusMessage = if (imported.second == null) {
+                                        "Modpack installed as " + imported.first.name + "."
+                                    } else {
+                                        "Modpack installed as " + imported.first.name + " (" +
+                                            imported.second.modLoaderTypeName() +
+                                            "). Forge/NeoForge may finish through the installer notification."
+                                    }
+                                    selectedItem = null
+                                    selectedDetail = null
+                                } catch (error: Exception) {
+                                    statusMessage = error.message ?: "Could not install the modpack."
+                                } finally {
+                                    importing = false
+                                }
                             }
                         }
                     }
