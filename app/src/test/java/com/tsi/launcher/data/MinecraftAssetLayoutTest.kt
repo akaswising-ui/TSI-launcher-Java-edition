@@ -1,6 +1,5 @@
 package com.tsi.launcher.data
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,16 +30,11 @@ class MinecraftAssetLayoutTest {
             objectFile.parentFile!!.mkdirs()
             objectFile.writeBytes(bytes)
 
-            val index = JSONObject()
-                .put("virtual", true)
-                .put("objects", JSONObject().put(
-                    "textures/gui/icons.png",
-                    JSONObject().put("hash", hash).put("size", bytes.size)
-                ))
+            val entries = listOf(MinecraftLegacyAsset("textures/gui/icons.png", hash, bytes.size.toLong()))
 
-            assertEquals(1, MinecraftAssetLayout.materialize(index, assets, resources))
+            assertEquals(1, MinecraftAssetLayout.materialize(true, false, entries, assets, resources))
             assertEquals(bytes.toList(), File(assets, "textures/gui/icons.png").readBytes().toList())
-            assertEquals(1, MinecraftAssetLayout.materialize(index, assets, resources))
+            assertEquals(1, MinecraftAssetLayout.materialize(true, false, entries, assets, resources))
         } finally {
             root.deleteRecursively()
         }
@@ -58,14 +52,9 @@ class MinecraftAssetLayoutTest {
             objectFile.parentFile!!.mkdirs()
             objectFile.writeBytes(bytes)
 
-            val index = JSONObject()
-                .put("map_to_resources", true)
-                .put("objects", JSONObject().put(
-                    "newsound/menu/click.ogg",
-                    JSONObject().put("hash", hash).put("size", bytes.size)
-                ))
+            val entries = listOf(MinecraftLegacyAsset("newsound/menu/click.ogg", hash, bytes.size.toLong()))
 
-            assertEquals(1, MinecraftAssetLayout.materialize(index, assets, resources))
+            assertEquals(1, MinecraftAssetLayout.materialize(false, true, entries, assets, resources))
             assertTrue(File(resources, "newsound/menu/click.ogg").isFile)
             assertTrue(!File(assets, "newsound/menu/click.ogg").exists())
         } finally {
@@ -83,13 +72,8 @@ class MinecraftAssetLayoutTest {
             val objectFile = File(File(File(assets, "objects"), hash.substring(0, 2)), hash)
             objectFile.parentFile!!.mkdirs()
             objectFile.writeBytes(bytes)
-            val index = JSONObject()
-                .put("virtual", true)
-                .put("objects", JSONObject().put(
-                    "../outside.bin",
-                    JSONObject().put("hash", hash).put("size", bytes.size)
-                ))
-            MinecraftAssetLayout.materialize(index, assets, File(root, "resources"))
+            val entries = listOf(MinecraftLegacyAsset("../outside.bin", hash, bytes.size.toLong()))
+            MinecraftAssetLayout.materialize(true, false, entries, assets, File(root, "resources"))
         } finally {
             root.deleteRecursively()
         }
