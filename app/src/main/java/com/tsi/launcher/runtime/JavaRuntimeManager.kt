@@ -60,9 +60,10 @@ class JavaRuntimeManager(private val context: Context) {
     private val privateRuntimeRoot = File(context.noBackupFilesDir, "tsi/.minecraft/runtimes")
     private val legacyRuntimeRoot = File(root, "runtimes")
 
-    fun inspect(versionId: String, runtimePreference: String): VersionVmInspection {
+    fun inspect(versionId: String, runtimePreference: String, instanceId: String = versionId): VersionVmInspection {
         val safeId = safeSegment(versionId)
         directoryManager.migrateLegacyStorage()
+        directoryManager.ensureVersionLayout(safeId, instanceId)
         val versionFolder = File(File(root, "versions"), safeId)
         val clientJar = File(versionFolder, "$safeId.jar")
         val metadataFile = File(versionFolder, "$safeId.json")
