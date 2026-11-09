@@ -24,6 +24,9 @@ data class MinecraftLegacyAsset(
  * those legacy paths after TSI has installed the object cache.
  */
 object MinecraftAssetLayout {
+    fun hasExpectedSha1(file: File, expected: String): Boolean =
+        file.isFile && matchesSha1(file, expected)
+
     /** Asset indexes can map several logical names to the same SHA-1 object. */
     fun uniqueObjectHashes(assetEntries: List<Pair<String, String>>): List<String> =
         assetEntries.map { it.second }.distinct()
