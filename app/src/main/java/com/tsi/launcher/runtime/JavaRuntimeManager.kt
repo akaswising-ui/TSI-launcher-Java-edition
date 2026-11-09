@@ -174,7 +174,17 @@ class JavaRuntimeManager(private val context: Context) {
         }
 
         val detected = scanRuntimes()
-        val requestedMajor = runtimePreference
+        val explicitRuntimeName = runtimePreference
+            .takeIf { it.startsWith("Name:") }
+            ?.removePrefix("Name:")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val namedRuntime = explicitRuntimeName?.let { name ->
+            detected.firstOrNull {
+                it.name == name && it.majorVersion >= (requiredMajor ?: 1)
+            }
+        }
+        val requestedMajor = if (explicitRuntimeName != null) null else runtimePreference
             .removePrefix("Java")
             .trim()
             .toIntOrNull()
@@ -184,7 +194,7 @@ class JavaRuntimeManager(private val context: Context) {
         }
         // Honor the selected runtime only when it meets the Minecraft version's
         // minimum Java requirement. Otherwise use the lowest compatible runtime.
-        val compatible = preferredMajor?.let { preferred ->
+        val compatible = namedRuntime ?: preferredMajor?.let { preferred ->
             detected.firstOrNull { it.majorVersion == preferred && it.majorVersion >= (requiredMajor ?: preferred) }
         } ?: minimumMajor?.let { minimum ->
             detected.firstOrNull { it.majorVersion >= minimum }
