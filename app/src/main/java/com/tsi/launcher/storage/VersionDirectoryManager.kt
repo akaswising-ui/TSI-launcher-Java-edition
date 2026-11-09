@@ -106,15 +106,16 @@ class VersionDirectoryManager(context: Context) {
         return 1
     }
 
-    fun ensureVersionLayout(versionId: String): VersionPaths {
+    fun ensureVersionLayout(versionId: String, instanceId: String = versionId): VersionPaths {
         val safeId = safeSegment(versionId)
+        val safeInstanceId = safeSegment(instanceId)
         migrateLegacyStorage()
         ensureDirectory(rootDirectory)
 
         val versionsRoot = child(rootDirectory, "versions")
         val instancesRoot = child(rootDirectory, "instances")
         val versionDirectory = child(versionsRoot, safeId)
-        val gameDirectory = child(child(instancesRoot, safeId), "game")
+        val gameDirectory = child(child(instancesRoot, safeInstanceId), "game")
         val assetsDirectory = child(rootDirectory, "assets")
         val librariesDirectory = child(rootDirectory, "libraries")
 
