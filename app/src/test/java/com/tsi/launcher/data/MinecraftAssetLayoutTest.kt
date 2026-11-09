@@ -10,6 +10,16 @@ import java.security.MessageDigest
 
 class MinecraftAssetLayoutTest {
     @Test
+    fun duplicateAssetHashesAreDownloadedOnlyOnce() {
+        val entries = listOf(
+            "textures/gui/icons.png" to "abc",
+            "textures/gui/widgets.png" to "abc",
+            "sounds/menu/click.ogg" to "def"
+        )
+        assertEquals(listOf("abc", "def"), MinecraftAssetLayout.uniqueObjectHashes(entries))
+    }
+
+    @Test
     fun virtualAssetsAreMaterializedUnderAssetsRoot() {
         val root = Files.createTempDirectory("tsi-asset-virtual").toFile()
         try {
