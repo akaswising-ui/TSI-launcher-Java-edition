@@ -518,8 +518,13 @@ private fun TsiLauncherApp() {
                         modifier = Modifier.fillMaxSize(),
                         versionId = selectedVersionId,
                         instanceId = activeInstance?.id ?: selectedVersionId,
+                        rendererId = activeInstance?.rendererId,
+                        javaArgs = activeInstance?.javaArgs,
+                        controlLayout = activeInstance?.controlLayout,
                         ramMb = ramMb.toInt(),
-                        runtimePreference = javaRuntime,
+                        runtimePreference = activeInstance?.selectedRuntime
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { "Name:" + it } ?: javaRuntime,
                         playerName = profileName,
                         storageAccessRefreshKey = storageAccessRefreshKey,
                         onBackToDashboard = { section = MainSection.DASHBOARD }
