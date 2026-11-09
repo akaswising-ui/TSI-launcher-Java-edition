@@ -82,6 +82,11 @@ fun GameInstanceManagerScreen(
     var nameInput by rememberSaveable { mutableStateOf("") }
     var cloneSelected by rememberSaveable { mutableStateOf(false) }
     var pendingExportId by remember { mutableStateOf<String?>(null) }
+    var launchSettingsTarget by remember { mutableStateOf<GameInstance?>(null) }
+    var rendererInput by rememberSaveable { mutableStateOf("") }
+    var runtimeInput by rememberSaveable { mutableStateOf("") }
+    var controlInput by rememberSaveable { mutableStateOf("") }
+    var javaArgsInput by rememberSaveable { mutableStateOf("") }
 
     fun refresh() {
         scope.launch {
@@ -305,6 +310,15 @@ fun GameInstanceManagerScreen(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             TextButton(onClick = {
+                                launchSettingsTarget = instance
+                                rendererInput = instance.rendererId.orEmpty()
+                                runtimeInput = instance.selectedRuntime.orEmpty()
+                                controlInput = instance.controlLayout.orEmpty()
+                                javaArgsInput = instance.javaArgs.orEmpty()
+                            }, enabled = !busy) {
+                                Text("Launch settings")
+                            }
+                            TextButton(onClick = {
                                 renameTarget = instance
                                 nameInput = instance.name
                                 nameDialog = true
@@ -385,6 +399,81 @@ fun GameInstanceManagerScreen(
                 }, enabled = !busy && nameInput.isNotBlank()) { Text("SAVE") }
             },
             dismissButton = { TextButton(onClick = { nameDialog = false; renameTarget = null }) { Text("CANCEL") } }
+        )
+    }
+
+    launchSettingsTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { launchSettingsTarget = null },
+            title = { Text("Per-instance launch settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Blank values use the launcher's global defaults.", color = InstanceMuted, fontSize = 11.sp)
+                    OutlinedTextField(
+                        value = rendererInput,
+                        onValueChange = { rendererInput = it.take(80) },
+                        label = { Text("Renderer ID") },
+                        placeholder = { Text("Example: opengles2") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = runtimeInput,
+                        onValueChange = { runtimeInput = it.take(80) },
+                        label = { Text("Installed Java runtime name") },
+                        placeholder = { Text("Blank = automatic runtime selection") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = controlInput,
+                        onValueChange = { controlInput = it.take(100) },
+                        label = { Text("Control layout name") },
+                        placeholder = { Text("Example: default") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = javaArgsInput,
+                        onValueChange = { javaArgsInput = it.take(8192) },
+                        label = { Text("Extra JVM arguments") },
+                        placeholder = { Text("Optional per-instance JVM arguments") },
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                    Text(
+                        "Use renderer IDs and runtime folder names shown by the embedded engine. Invalid or unavailable choices will be rejected before launch.",
+                        color = InstanceMuted,
+                        fontSize = 10.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val updated = withContext(Dispatchers.IO) {
+                                repository.updateLaunchSettings(
+                                    target.id,
+                                    rendererInput,
+                                    javaArgsInput,
+                                    runtimeInput,
+                                    controlInput
+                                )
+                            }
+                            instances = withContext(Dispatchers.IO) { repository.list() }
+                            if (selectedId == updated.id) onInstanceSelected(updated)
+                            message = "Per-instance launch settings saved."
+                            launchSettingsTarget = null
+                        } catch (error: Exception) {
+                            message = error.message ?: "Could not save launch settings."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }, enabled = !busy) { Text("SAVE") }
+            },
+            dismissButton = {
+                TextButton(onClick = { launchSettingsTarget = null }) { Text("CANCEL") }
+            }
         )
     }
 
