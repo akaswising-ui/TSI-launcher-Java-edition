@@ -164,7 +164,11 @@ class JavaRuntimeManager(private val context: Context) {
                         val objectDirectory = File(assetsRoot, "objects")
                         val mapToResources = assetIndexJson.optBoolean("map_to_resources", false)
                         val virtualAssets = assetIndexJson.optBoolean("virtual", false)
-                        val legacyRoot = if (mapToResources) File(root, "resources") else assetsRoot
+                        val legacyRoot = when {
+                            mapToResources -> File(root, "resources")
+                            virtualAssets -> File(assetsRoot, "virtual/legacy")
+                            else -> assetsRoot
+                        }
                         while (objectKeys.hasNext()) {
                             val assetName = objectKeys.next()
                             val item = objectMap.optJSONObject(assetName) ?: continue
