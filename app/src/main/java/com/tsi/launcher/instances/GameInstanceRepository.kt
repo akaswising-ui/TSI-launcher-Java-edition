@@ -390,25 +390,32 @@ class GameInstanceRepository(context: Context) {
         }
 
         val created = createInternal(validateName(name), versionId, false, false)
-        copyTree(source, created.gameDirectory)
+        val completed = try {
+            copyTree(source, created.gameDirectory)
 
-        val versionMetadataFile = File(
-            File(File(minecraftRoot, "versions"), versionId),
-            "$versionId.json"
-        )
-        val baseVersion = runCatching {
-            if (!versionMetadataFile.isFile) versionId
-            else JSONObject(versionMetadataFile.readText(Charsets.UTF_8))
-                .optString("inheritsFrom")
-                .takeIf { it.isNotBlank() }
-                ?: versionId
-        }.getOrDefault(versionId)
+            val versionMetadataFile = File(
+                File(File(minecraftRoot, "versions"), versionId),
+                "$versionId.json"
+            )
+            val baseVersion = runCatching {
+                if (!versionMetadataFile.isFile) versionId
+                else JSONObject(versionMetadataFile.readText(Charsets.UTF_8))
+                    .optString("inheritsFrom")
+                    .takeIf { it.isNotBlank() }
+                    ?: versionId
+            }.getOrDefault(versionId)
 
-        val completed = created.copy(minecraftVersion = baseVersion)
-        writeInstance(completed)
+            created.copy(minecraftVersion = baseVersion).also(::writeInstance)
+        } catch (error: Exception) {
+            // Remove only the incomplete TSI record. The source pack stays intact
+            // until the complete copy and metadata write have both succeeded.
+            runCatching { deleteTree(instanceRoot(created.id)) }
+            if (error is IOException) throw error
+            throw IOException("Could not adopt the installed modpack directory.", error)
+        }
         select(completed.id)
-        // Source remains intact if the transfer or metadata write failed.
-        deleteTree(source)
+        // The original folder is removed only after the imported instance is durable.
+        runCatching { deleteTree(source) }
         return completed
     }
 
