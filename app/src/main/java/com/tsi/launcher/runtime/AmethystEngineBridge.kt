@@ -343,7 +343,9 @@ object AmethystEngineBridge {
         instanceId: String = versionId,
         rendererId: String? = null,
         javaArgs: String? = null,
-        controlLayout: String? = null
+        controlLayout: String? = null,
+        argsMode: Int = 0,
+        sharedData: Boolean = false
     ) {
         ensureDefaultControlMap(context)
         val safeVersion = versionId.trim()
@@ -380,7 +382,11 @@ object AmethystEngineBridge {
         require(selectedInstanceRoot.path.startsWith(instancesRoot.path + File.separator)) {
             "Selected game instance points outside the instances folder."
         }
-        val gameDirectory = File(selectedInstanceRoot, "game")
+        val gameDirectory = if (sharedData) {
+            File(minecraftRoot.parentFile ?: minecraftRoot, "shared_dir")
+        } else {
+            File(selectedInstanceRoot, "game")
+        }
         if (!gameDirectory.exists() && !gameDirectory.mkdirs()) {
             throw IOException("Could not create the selected Minecraft game directory.")
         }
@@ -406,9 +412,20 @@ object AmethystEngineBridge {
                 "Renderer $safeRendererId is not available or is incompatible with this device."
             }
         }
-        val safeJavaArgs = javaArgs?.trim()?.takeIf { it.isNotBlank() }
-        require(safeJavaArgs == null || (safeJavaArgs.length <= 8192 && !safeJavaArgs.contains('\u0000'))) {
+        require(argsMode in 0..2) { "Unsupported JVM argument merge mode." }
+        val rawJavaArgs = javaArgs?.trim()?.takeIf { it.isNotBlank() }
+        require(rawJavaArgs == null || (rawJavaArgs.length <= 8192 && !rawJavaArgs.contains('\u0000'))) {
             "Per-instance JVM arguments exceed the 8192-character limit or contain an invalid character."
+        }
+        val defaultJavaArgs = context.getSharedPreferences(
+            context.packageName + "_preferences",
+            Context.MODE_PRIVATE
+        ).getString("javaArgs", "").orEmpty().trim()
+        val safeJavaArgs = when (argsMode) {
+            0 -> rawJavaArgs
+            1 -> listOf(defaultJavaArgs, rawJavaArgs).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
+            2 -> listOf(rawJavaArgs, defaultJavaArgs).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
+            else -> throw IllegalArgumentException("Unsupported JVM argument merge mode.")
         }
         val safeControlLayout = controlLayout?.trim()?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
         if (safeControlLayout != null) {
@@ -436,7 +453,8 @@ object AmethystEngineBridge {
             instanceId = safeInstanceId,
             rendererId = safeRendererId,
             javaArgs = safeJavaArgs,
-            controlLayout = safeControlLayout
+            controlLayout = safeControlLayout,
+            sharedData = sharedData
         )
         activateAmethystRuntime(
             context = context,
@@ -531,7 +549,8 @@ object AmethystEngineBridge {
         instanceId: String,
         rendererId: String?,
         javaArgs: String?,
-        controlLayout: String?
+        controlLayout: String?,
+        sharedData: Boolean
     ) {
         val profilesFile = File(minecraftRoot, "launcher_profiles.json")
         val launcherProfiles = if (profilesFile.isFile) {
@@ -553,7 +572,11 @@ object AmethystEngineBridge {
             .put("name", "TSI " + versionId + " (" + instanceId.take(8) + ")")
             .put("type", "custom")
             .put("lastVersionId", versionId)
-            .put("gameDir", PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game")
+            .put(
+                "gameDir",
+                if (sharedData) PROFILE_PREFIX + "shared_dir"
+                else PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game"
+            )
             .put("javaDir", PROFILE_PREFIX + runtimeName)
 
         rendererId?.let { profile.put("pojavRendererName", it) }
