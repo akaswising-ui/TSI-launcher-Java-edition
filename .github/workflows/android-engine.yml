@@ -146,7 +146,7 @@ jobs:
               "Game Instances",
               "IMPORT ZIP",
               "EXPORT",
-              "MultiMC/Prism",
+              "Imports and exports MultiMC / Prism Launcher ZIP files.",
               "current_instance_id",
               "migrateLegacyStorage",
               "hasLegacyStoragePermission",
