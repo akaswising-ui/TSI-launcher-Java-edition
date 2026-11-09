@@ -1039,6 +1039,57 @@ if "if (fragmentManager.isStateSaved())" not in source or "retryOnResume" not in
     raise SystemExit("Lifecycle-safe fragment navigation was not integrated.")
 PY
 
+
+# Fix format-string diagnostics in the pinned Amethyst JNI sources. These are
+# upstream files in the build checkout, so patch them reproducibly rather than
+# editing an ephemeral workspace by hand.
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+patches = [
+    (
+        "app_pojavlauncher/src/main/jni/ctxbridges/gl_bridge.c",
+        'printf("EGLBridge: bind failed: %p\\n", eglGetError_p());',
+        'printf("EGLBridge: bind failed: %d\\n", eglGetError_p());',
+        "EGL error format",
+    ),
+    (
+        "app_pojavlauncher/src/main/jni/ctxbridges/swap_interval_no_egl.c",
+        'LOGW("ANativeWindow version does not match. Expected %i, got %i",\\n'
+        '                            sizeof(struct ANativeWindow_real), nativeWindowReal->common.version);',
+        'LOGW("ANativeWindow version does not match. Expected %zu, got %i",\\n'
+        '                            sizeof(struct ANativeWindow_real), nativeWindowReal->common.version);',
+        "ANativeWindow size format",
+    ),
+    (
+        "app_pojavlauncher/src/main/jni/input_bridge_v3.c",
+        '"nativeSetWindowAttrib failed: %i", return;',
+        '"nativeSetWindowAttrib failed", return;',
+        "JNI attach diagnostic format",
+    ),
+    (
+        "app_pojavlauncher/src/main/jni/jre_launcher.c",
+        '"Failed to set signal hander for signal %i: %s", i, strerror(errno));',
+        '"Failed to set signal hander for signal %zu: %s", i, strerror(errno));',
+        "signal index format",
+    ),
+]
+
+for relative_path, old, new, label in patches:
+    path = root / relative_path
+    source = path.read_text()
+    count = source.count(old)
+    if count == 0 and new in source:
+        continue
+    if count != 1:
+        raise SystemExit(f"Expected one {label} in {relative_path}; found {count}")
+    path.write_text(source.replace(old, new, 1))
+
+print("Applied deterministic JNI format-string fixes.")
+PY
+
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
