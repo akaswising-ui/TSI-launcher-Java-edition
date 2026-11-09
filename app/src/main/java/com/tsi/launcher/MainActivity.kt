@@ -535,7 +535,12 @@ private fun TsiLauncherApp() {
                         modifier = Modifier.fillMaxSize(),
                         profileName = profileName,
                         searchQuery = searchQuery,
-                        onInstancesClick = { section = MainSection.INSTANCES }
+                        onInstancesClick = { section = MainSection.INSTANCES },
+                        onInstanceImported = { instance ->
+                            activeInstance = instance
+                            selectedVersionId = instance.versionId
+                            section = MainSection.DASHBOARD
+                        }
                     )
                     MainSection.INSTANCES -> GameInstanceManagerScreen(
                         modifier = Modifier.fillMaxSize(),
