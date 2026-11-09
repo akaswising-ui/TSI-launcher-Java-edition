@@ -44,9 +44,10 @@ class JavaGameInstaller(
 ) {
     suspend fun install(
         version: MinecraftVersion,
+        instanceId: String = version.id,
         progress: suspend (String) -> Unit = {}
     ): JavaGameInstallResult = withContext(Dispatchers.IO) {
-        val paths = directoryManager.ensureVersionLayout(version.id)
+        val paths = directoryManager.ensureVersionLayout(version.id, instanceId)
         progress("Fetching Minecraft ${version.id} version metadata…")
 
         val metadataText = downloadText(version.url)
