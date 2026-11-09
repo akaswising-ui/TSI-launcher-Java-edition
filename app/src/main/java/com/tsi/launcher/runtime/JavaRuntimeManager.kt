@@ -74,6 +74,7 @@ class JavaRuntimeManager(private val context: Context) {
         var clientJarValid = false
         var libraryCount = 0
         var installedLibraryCount = 0
+        var assetIndexDeclared = false
         var assetIndexId: String? = null
         var assetIndexExists = false
         var assetObjectCount = 0
@@ -145,6 +146,7 @@ class JavaRuntimeManager(private val context: Context) {
                 }
 
                 val assetOwner = metadataChain.firstOrNull { it.metadata.optJSONObject("assetIndex") != null }
+                assetIndexDeclared = assetOwner != null
                 val assetIndexMetadata = assetOwner?.metadata?.optJSONObject("assetIndex")
                 assetIndexId = assetIndexMetadata?.optString("id")?.takeIf { !it.isNullOrBlank() }
 
@@ -177,7 +179,8 @@ class JavaRuntimeManager(private val context: Context) {
                             val expectedSize = item.optLong("size", -1L)
                             val objectFile = File(File(objectDirectory, hash.substring(0, 2)), hash)
                             if (objectFile.isFile &&
-                                (expectedSize <= 0L || objectFile.length() == expectedSize)
+                                (expectedSize <= 0L || objectFile.length() == expectedSize) &&
+                                MinecraftAssetLayout.hasExpectedSha1(objectFile, hash)
                             ) {
                                 assetObjectCount++
                             }
@@ -188,7 +191,8 @@ class JavaRuntimeManager(private val context: Context) {
                                     candidate
                                 }.getOrNull()
                                 if (legacyFile == null || !legacyFile.isFile ||
-                                    (expectedSize >= 0L && legacyFile.length() != expectedSize)
+                                    (expectedSize >= 0L && legacyFile.length() != expectedSize) ||
+                                    !MinecraftAssetLayout.hasExpectedSha1(legacyFile, hash)
                                 ) {
                                     legacyAssetFilesReady = false
                                 }
@@ -243,13 +247,13 @@ class JavaRuntimeManager(private val context: Context) {
             if (libraryCount == 0 || installedLibraryCount < libraryCount) {
                 add("Minecraft libraries are incomplete ($installedLibraryCount/$libraryCount).")
             }
-            if (assetIndexId == null || !assetIndexExists) {
+            if (assetIndexDeclared && (assetIndexId == null || !assetIndexExists)) {
                 add("The Minecraft asset index is missing.")
             }
-            if (assetObjectTotal == 0) {
+            if (assetIndexDeclared && assetObjectTotal == 0) {
                 add("The asset index contains no readable object entries.")
-            } else if (assetObjectCount < assetObjectTotal) {
-                add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present with expected sizes).")
+            } else if (assetIndexDeclared && assetObjectCount < assetObjectTotal) {
+                add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present and SHA-1 verified).")
             }
             if (!legacyAssetFilesReady) {
                 add("Legacy asset paths are incomplete. Reinstall this version to rebuild the virtual/resource asset files.")
