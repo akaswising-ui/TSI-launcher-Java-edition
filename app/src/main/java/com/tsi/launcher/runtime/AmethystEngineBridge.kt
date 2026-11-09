@@ -421,10 +421,13 @@ object AmethystEngineBridge {
             context.packageName + "_preferences",
             Context.MODE_PRIVATE
         ).getString("javaArgs", "").orEmpty().trim()
+        val instanceJavaArgs = rawJavaArgs.orEmpty()
         val safeJavaArgs = when (argsMode) {
             0 -> rawJavaArgs
-            1 -> listOf(defaultJavaArgs, rawJavaArgs).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
-            2 -> listOf(rawJavaArgs, defaultJavaArgs).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
+            1 -> listOf(defaultJavaArgs, instanceJavaArgs)
+                .filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
+            2 -> listOf(instanceJavaArgs, defaultJavaArgs)
+                .filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
             else -> throw IllegalArgumentException("Unsupported JVM argument merge mode.")
         }
         val safeControlLayout = controlLayout?.trim()?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
