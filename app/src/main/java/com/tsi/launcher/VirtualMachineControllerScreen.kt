@@ -70,6 +70,8 @@ fun VirtualMachineControllerScreen(
     rendererId: String? = null,
     javaArgs: String? = null,
     controlLayout: String? = null,
+    argsMode: Int = 0,
+    sharedData: Boolean = false,
     ramMb: Int,
     runtimePreference: String,
     playerName: String,
@@ -348,7 +350,9 @@ fun VirtualMachineControllerScreen(
                                     instanceId = instanceId,
                                     rendererId = rendererId,
                                     javaArgs = javaArgs,
-                                    controlLayout = controlLayout
+                                    controlLayout = controlLayout,
+                                    argsMode = argsMode,
+                                    sharedData = sharedData
                                 )
                             }
                         } catch (error: Exception) {
