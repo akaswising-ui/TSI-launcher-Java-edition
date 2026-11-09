@@ -91,7 +91,7 @@ class JavaRuntimeManager(private val context: Context) {
                 }
 
                 // Legacy metadata before javaVersion used Java 8.
-                if (requiredMajor == null && isLegacyVersion(safeId)) {
+                if (requiredMajor == null && metadataChain.any { isLegacyVersion(it.id) }) {
                     requiredMajor = 8
                 }
 
