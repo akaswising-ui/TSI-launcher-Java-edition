@@ -67,6 +67,9 @@ fun VirtualMachineControllerScreen(
     modifier: Modifier = Modifier,
     versionId: String,
     instanceId: String,
+    rendererId: String? = null,
+    javaArgs: String? = null,
+    controlLayout: String? = null,
     ramMb: Int,
     runtimePreference: String,
     playerName: String,
@@ -342,7 +345,10 @@ fun VirtualMachineControllerScreen(
                                     heapMb = ramMb.toFloat(),
                                     runtime = runtime,
                                     playerName = playerName,
-                                    instanceId = instanceId
+                                    instanceId = instanceId,
+                                    rendererId = rendererId,
+                                    javaArgs = javaArgs,
+                                    controlLayout = controlLayout
                                 )
                             }
                         } catch (error: Exception) {
