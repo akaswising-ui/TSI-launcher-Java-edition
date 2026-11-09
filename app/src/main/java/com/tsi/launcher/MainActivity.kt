@@ -121,6 +121,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 import com.tsi.launcher.data.JavaGameInstaller
+import com.tsi.launcher.instances.GameInstance
+import com.tsi.launcher.instances.GameInstanceManagerScreen
+import com.tsi.launcher.instances.GameInstanceRepository
 import com.tsi.launcher.runtime.AmethystEngineBridge
 import com.tsi.launcher.runtime.DevicePerformanceProfile
 import com.tsi.launcher.data.MinecraftVersion
@@ -153,7 +156,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class MainSection { DASHBOARD, VM_CONTROLLER, MOD_PACKS, NEWS, SETTINGS }
+private enum class MainSection { DASHBOARD, VM_CONTROLLER, MOD_PACKS, INSTANCES, NEWS, SETTINGS }
 
 @Composable
 private fun TsiLauncherApp() {
@@ -164,12 +167,14 @@ private fun TsiLauncherApp() {
     val manifestRepository = remember { VersionManifestRepository() }
     val directoryManager = remember { VersionDirectoryManager(context.applicationContext) }
     val gameInstaller = remember { JavaGameInstaller(context.applicationContext, directoryManager) }
+    val instanceRepository = remember { GameInstanceRepository(context.applicationContext) }
     val scope = rememberCoroutineScope()
 
     var section by rememberSaveable { mutableStateOf(MainSection.DASHBOARD) }
     var versions by remember { mutableStateOf<List<MinecraftVersion>>(emptyList()) }
     var selectedFilter by rememberSaveable { mutableStateOf(VersionFilter.ALL) }
     var selectedVersionId by rememberSaveable { mutableStateOf("") }
+    var activeInstance by remember { mutableStateOf<GameInstance?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var activeDownload by remember { mutableStateOf<String?>(null) }
@@ -270,6 +275,16 @@ private fun TsiLauncherApp() {
         }
         accountMode = AmethystEngineBridge.selectedAccountMode(context)
         refreshVersions()
+        val defaultVersion = selectedVersionId.ifBlank {
+            versions.firstOrNull { it.type == "release" }?.id.orEmpty()
+        }
+        if (defaultVersion.isNotBlank()) {
+            val instance = withContext(Dispatchers.IO) {
+                instanceRepository.selected() ?: instanceRepository.ensureDefault(defaultVersion)
+            }
+            activeInstance = instance
+            selectedVersionId = instance.versionId
+        }
     }
 
     MaterialTheme(colorScheme = lightColorScheme(
@@ -339,6 +354,14 @@ private fun TsiLauncherApp() {
                                     onClick = {
                                         overflowOpen = false
                                         scope.launch { refreshVersions() }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Manage instances") },
+                                    leadingIcon = { Icon(Icons.Filled.Folder, null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        section = MainSection.INSTANCES
                                     }
                                 )
                                 DropdownMenuItem(
@@ -417,7 +440,21 @@ private fun TsiLauncherApp() {
                                 selectedFilter = selectedFilter,
                                 onFilterChange = { selectedFilter = it },
                                 selectedVersionId = selectedVersionId,
-                                onVersionSelect = { selectedVersionId = it },
+                                onVersionSelect = { versionId ->
+                                    selectedVersionId = versionId
+                                    val currentInstance = activeInstance
+                                    if (currentInstance != null && currentInstance.versionId != versionId) {
+                                        scope.launch {
+                                            try {
+                                                activeInstance = withContext(Dispatchers.IO) {
+                                                    instanceRepository.updateVersion(currentInstance.id, versionId)
+                                                }
+                                            } catch (error: Exception) {
+                                                statusMessage = "Could not update instance version: " + (error.message ?: "unknown error")
+                                            }
+                                        }
+                                    }
+                                },
                                 searchQuery = searchQuery,
                                 loading = isLoading,
                                 statusMessage = statusMessage,
@@ -446,7 +483,18 @@ private fun TsiLauncherApp() {
                                         activeDownload = version.id
                                         statusMessage = "Preparing complete Java installation for ${version.id}…"
                                         try {
-                                            val result = gameInstaller.install(version) { progress ->
+                                            val instanceForInstall = activeInstance ?: withContext(Dispatchers.IO) {
+                                                instanceRepository.ensureDefault(version.id)
+                                            }
+                                            val matchingInstance = if (instanceForInstall.versionId == version.id) {
+                                                instanceForInstall
+                                            } else {
+                                                withContext(Dispatchers.IO) {
+                                                    instanceRepository.updateVersion(instanceForInstall.id, version.id)
+                                                }
+                                            }
+                                            activeInstance = matchingInstance
+                                            val result = gameInstaller.install(version, matchingInstance.id) { progress ->
                                                 withContext(Dispatchers.Main.immediate) {
                                                     statusMessage = progress
                                                 }
@@ -468,6 +516,7 @@ private fun TsiLauncherApp() {
                     MainSection.VM_CONTROLLER -> VirtualMachineControllerScreen(
                         modifier = Modifier.fillMaxSize(),
                         versionId = selectedVersionId,
+                        instanceId = activeInstance?.id ?: selectedVersionId,
                         ramMb = ramMb.toInt(),
                         runtimePreference = javaRuntime,
                         playerName = profileName,
@@ -478,7 +527,17 @@ private fun TsiLauncherApp() {
                         modifier = Modifier.fillMaxSize(),
                         profileName = profileName,
                         searchQuery = searchQuery,
-                        onInstancesClick = { section = MainSection.DASHBOARD }
+                        onInstancesClick = { section = MainSection.INSTANCES }
+                    )
+                    MainSection.INSTANCES -> GameInstanceManagerScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        selectedVersionId = selectedVersionId,
+                        onInstanceSelected = { instance ->
+                            activeInstance = instance
+                            selectedVersionId = instance.versionId
+                            section = MainSection.DASHBOARD
+                        },
+                        onBack = { section = MainSection.DASHBOARD }
                     )
                     MainSection.NEWS -> NewsScreen(Modifier.fillMaxSize())
                     MainSection.SETTINGS -> SettingsScreen(
