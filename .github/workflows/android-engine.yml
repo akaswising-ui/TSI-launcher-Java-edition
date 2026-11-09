@@ -223,19 +223,19 @@ jobs:
         run: |
           set -euo pipefail
           APK=out/TSI-Launcher-engine-debug.apk
-          RELEASE_APK=out/app-debug.apk
-          SHA=out/TSI-Launcher-engine-debug.apk.sha256
-          cp "$APK" "$RELEASE_APK"
+          # Publish one canonical APK asset. The checksum remains in the Actions
+          # artifact; batching same-run aliases/checksum assets caused uploads.github.com
+          # to return 404 for the final asset despite a successful Gradle build.
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$APK" "$RELEASE_APK" "$SHA" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" "$APK" --clobber --repo "$GITHUB_REPOSITORY"
             gh release edit "$RELEASE_TAG" --title "TSI Launcher Java Edition Engine APK" \
-              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. The original Pojav launcher home remains the app entry screen. Debug build for testing." \
+              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. Original launcher icon and Pojav game engine retained. Debug build for testing; device-level game launch tests are still required." \
               --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" "$APK" "$RELEASE_APK" "$SHA" \
+            gh release create "$RELEASE_TAG" "$APK" \
               --repo "$GITHUB_REPOSITORY" \
               --title "TSI Launcher Java Edition Engine APK" \
-              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. The original Pojav launcher home remains the app entry screen. Debug build for testing." \
+              --notes "Engine-integrated Java Edition APK. Includes the Amethyst Android JVM/game host. Original launcher icon and Pojav game engine retained. Debug build for testing; device-level game launch tests are still required." \
               --prerelease \
               --target "$GITHUB_SHA"
           fi
