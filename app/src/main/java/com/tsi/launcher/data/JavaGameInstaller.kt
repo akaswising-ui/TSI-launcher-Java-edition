@@ -208,11 +208,34 @@ class JavaGameInstaller(
             }
         }
 
-        val legacyAssets = MinecraftAssetLayout.materialize(
-            assetIndexJson,
-            paths.sharedAssetsDirectory,
-            File(paths.sharedAssetsDirectory.parentFile ?: paths.sharedAssetsDirectory, "resources")
-        )
+        val mapToResources = assetIndexJson.optBoolean("map_to_resources", false)
+        val virtualAssets = assetIndexJson.optBoolean("virtual", false)
+        val legacyAssets = if (mapToResources || virtualAssets) {
+            val legacyEntries = buildList {
+                val names = objects.keys()
+                while (names.hasNext()) {
+                    val name = names.next()
+                    val descriptor = objects.optJSONObject(name)
+                        ?: throw IOException("Invalid legacy asset entry: " + name)
+                    add(
+                        MinecraftLegacyAsset(
+                            name = name,
+                            hash = descriptor.optString("hash"),
+                            size = descriptor.optLong("size", -1L)
+                        )
+                    )
+                }
+            }
+            MinecraftAssetLayout.materialize(
+                virtualAssets,
+                mapToResources,
+                legacyEntries,
+                paths.sharedAssetsDirectory,
+                File(paths.sharedAssetsDirectory.parentFile ?: paths.sharedAssetsDirectory, "resources")
+            )
+        } else {
+            0
+        }
         if (legacyAssets > 0) {
             progress("Prepared " + legacyAssets + " legacy asset paths for older Minecraft versions.")
         }
