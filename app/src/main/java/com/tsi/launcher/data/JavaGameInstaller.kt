@@ -205,6 +205,15 @@ class JavaGameInstaller(
             }
         }
 
+        val legacyAssets = MinecraftAssetLayout.materialize(
+            assetIndexJson,
+            paths.sharedAssetsDirectory,
+            File(paths.sharedAssetsDirectory.parentFile ?: paths.sharedAssetsDirectory, "resources")
+        )
+        if (legacyAssets > 0) {
+            progress("Prepared " + legacyAssets + " legacy asset paths for older Minecraft versions.")
+        }
+
         JavaGameInstallResult(
             versionId = version.id,
             clientJar = clientJar,
