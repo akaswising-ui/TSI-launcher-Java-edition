@@ -521,6 +521,8 @@ private fun TsiLauncherApp() {
                         rendererId = activeInstance?.rendererId,
                         javaArgs = activeInstance?.javaArgs,
                         controlLayout = activeInstance?.controlLayout,
+                        argsMode = activeInstance?.argsMode ?: 0,
+                        sharedData = activeInstance?.sharedData ?: false,
                         ramMb = ramMb.toInt(),
                         runtimePreference = activeInstance?.selectedRuntime
                             ?.takeIf { it.isNotBlank() }
