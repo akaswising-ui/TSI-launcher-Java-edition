@@ -177,14 +177,17 @@ class JavaGameInstaller(
         ensureDirectory(assetObjectsDir)
         val finished = AtomicInteger(0)
         val totalAssets = assetEntries.size
-        progress("Checking $totalAssets Minecraft assets…")
+        val uniqueAssetHashes = MinecraftAssetLayout.uniqueObjectHashes(assetEntries)
+        val uniqueObjectCount = uniqueAssetHashes.size
+        progress("Checking $totalAssets Minecraft assets ($uniqueObjectCount unique objects)…")
 
-        // Bounded parallel downloads prevent a large asset index from creating
-        // thousands of simultaneous network requests on Android.
+        // An asset index can map multiple names to the same SHA-1. Download
+        // each shared object once so parallel tasks never race on the same
+        // destination or its .part file.
         val semaphore = Semaphore(5)
-        assetEntries.chunked(40).forEach { chunk ->
+        uniqueAssetHashes.chunked(40).forEach { chunk ->
             coroutineScope {
-                chunk.map { (_, hash) ->
+                chunk.map { hash ->
                     async(Dispatchers.IO) {
                         semaphore.withPermit {
                             val prefix = hash.substring(0, 2)
@@ -196,8 +199,8 @@ class JavaGameInstaller(
                                 downloadVerified(assetUrl, destination, hash, -1L)
                             }
                             val done = finished.incrementAndGet()
-                            if (done % 50 == 0 || done == totalAssets) {
-                                progress("Minecraft assets: $done / $totalAssets")
+                            if (done % 50 == 0 || done == uniqueObjectCount) {
+                                progress("Minecraft asset objects: $done / $uniqueObjectCount")
                             }
                         }
                     }
