@@ -27,7 +27,9 @@ data class GameInstance(
     val rendererId: String? = null,
     val javaArgs: String? = null,
     val selectedRuntime: String? = null,
-    val controlLayout: String? = null
+    val controlLayout: String? = null,
+    val argsMode: Int = 0,
+    val sharedData: Boolean = false
 )
 
 /**
@@ -39,6 +41,7 @@ class GameInstanceRepository(context: Context) {
     private val appContext = context.applicationContext
     private val minecraftRoot = AmethystStoragePaths.minecraftHome(appContext)
     private val instancesRoot = File(minecraftRoot, "instances")
+    private val sharedDataDirectory = File(minecraftRoot.parentFile ?: minecraftRoot, "shared_dir")
     private val preferences = appContext.getSharedPreferences("tsi_launcher_preferences", Context.MODE_PRIVATE)
 
     companion object {
@@ -96,9 +99,14 @@ class GameInstanceRepository(context: Context) {
     }
 
     @Synchronized
-    fun create(name: String, versionId: String, cloneSelected: Boolean = false): GameInstance {
+    fun create(
+        name: String,
+        versionId: String,
+        cloneSelected: Boolean = false,
+        sharedData: Boolean = false
+    ): GameInstance {
         requireSafeVersion(versionId)
-        val created = createInternal(validateName(name), versionId, false)
+        val created = createInternal(validateName(name), versionId, false, sharedData)
         if (cloneSelected) {
             val source = selected()
             if (source != null && source.gameDirectory.isDirectory) copyTree(source.gameDirectory, created.gameDirectory)
@@ -132,12 +140,14 @@ class GameInstanceRepository(context: Context) {
         rendererId: String?,
         javaArgs: String?,
         selectedRuntime: String?,
-        controlLayout: String?
+        controlLayout: String?,
+        argsMode: Int = 0
     ): GameInstance {
         val current = readInstance(instanceRoot(id)) ?: throw IOException("Instance not found.")
         val safeRenderer = optionalIdentifier(rendererId, "renderer ID", 80)
         val safeRuntime = optionalIdentifier(selectedRuntime, "runtime name", 80)
         val safeControl = optionalIdentifier(controlLayout?.removeSuffix(".json"), "control layout name", 100)
+        require(argsMode in 0..2) { "Unsupported JVM argument merge mode." }
         val safeArgs = javaArgs?.trim()?.takeIf { it.isNotBlank() }
         require(safeArgs == null || (safeArgs.length <= 8192 && !safeArgs.contains('\u0000'))) {
             "Java arguments must be no longer than 8192 characters."
@@ -146,7 +156,8 @@ class GameInstanceRepository(context: Context) {
             rendererId = safeRenderer,
             javaArgs = safeArgs,
             selectedRuntime = safeRuntime,
-            controlLayout = safeControl
+            controlLayout = safeControl,
+            argsMode = argsMode
         ).also(::writeInstance)
     }
 
@@ -212,6 +223,10 @@ class GameInstanceRepository(context: Context) {
                 requireSafeVersion(minecraftVersion)
 
                 val loader = findLoader(components)
+                val sharedData = config["TSI_SharedData"]?.toBooleanStrictOrNull()
+                    ?: config["SharedData"]?.toBooleanStrictOrNull()
+                    ?: false
+                val argsMode = config["TSI_ArgsMode"]?.toIntOrNull()?.coerceIn(0, 2) ?: 0
                 val rawName = config["name"]?.takeIf { it.isNotBlank() } ?: archive.nameWithoutExtension
                 val instanceName = validateName(rawName)
                 val candidateBases = listOf(prefix + ".minecraft/", prefix + "minecraft/")
@@ -259,7 +274,7 @@ class GameInstanceRepository(context: Context) {
                 if (entriesSeen == 0) throw IOException("The instance ZIP contains no Minecraft game files.")
 
                 val versionId = resolveImportedVersionId(stagedMinecraft, minecraftVersion, loader)
-                created = createInternal(instanceName, versionId, false)
+                created = createInternal(instanceName, versionId, false, sharedData)
                 mergeStagedMinecraft(stagedMinecraft, created.gameDirectory)
                 val completed = created.copy(
                     minecraftVersion = minecraftVersion,
@@ -270,7 +285,8 @@ class GameInstanceRepository(context: Context) {
                         !it.isBlank() && !config["OverrideJavaArgs"].equals("false", ignoreCase = true)
                     },
                     selectedRuntime = config["TSI_Runtime"],
-                    controlLayout = config["TSI_ControlLayout"]
+                    controlLayout = config["TSI_ControlLayout"],
+                    argsMode = argsMode
                 )
                 writeInstance(completed)
                 select(completed.id)
@@ -307,6 +323,8 @@ class GameInstanceRepository(context: Context) {
                 instance.rendererId?.let { configLines += "TSI_Renderer=" + it }
                 instance.selectedRuntime?.let { configLines += "TSI_Runtime=" + it }
                 instance.controlLayout?.let { configLines += "TSI_ControlLayout=" + it }
+                configLines += "TSI_ArgsMode=" + instance.argsMode
+                configLines += "TSI_SharedData=" + instance.sharedData
                 val config = configLines.joinToString("\n", postfix = "\n")
                 addTextEntry(zip, "instance.cfg", config)
 
@@ -339,15 +357,29 @@ class GameInstanceRepository(context: Context) {
         }
     }
 
-    private fun createInternal(name: String, versionId: String, pinned: Boolean): GameInstance {
+    private fun createInternal(
+        name: String,
+        versionId: String,
+        pinned: Boolean,
+        sharedData: Boolean = false
+    ): GameInstance {
         ensureDirectory(instancesRoot)
         val id = UUID.randomUUID().toString()
         val folder = instanceRoot(id)
         ensureDirectory(folder)
-        val game = File(folder, "game")
+        val game = if (sharedData) sharedDataDirectory else File(folder, "game")
         ensureGameFolders(game)
         val instance = GameInstance(
-            id, name, versionId, versionId, pinned, null, null, System.currentTimeMillis(), game
+            id = id,
+            name = name,
+            versionId = versionId,
+            minecraftVersion = versionId,
+            pinned = pinned,
+            loaderId = null,
+            loaderVersion = null,
+            createdAt = System.currentTimeMillis(),
+            gameDirectory = game,
+            sharedData = sharedData
         )
         writeInstance(instance)
         return instance
@@ -360,8 +392,14 @@ class GameInstanceRepository(context: Context) {
             val json = JSONObject(metadata.readText(Charsets.UTF_8))
             val id = json.getString("id")
             if (safeSegment(id) != folder.name) return@runCatching null
-            val game = File(folder, "game").canonicalFile
-            if (!game.path.startsWith(folder.canonicalFile.path + File.separator)) return@runCatching null
+            val sharedData = json.optBoolean("sharedData", false)
+            val expectedGame = if (sharedData) sharedDataDirectory else File(folder, "game")
+            val game = expectedGame.canonicalFile
+            val allowedRoot = if (sharedData) sharedDataDirectory.canonicalFile
+                else folder.canonicalFile
+            if (!game.path.startsWith(allowedRoot.path) ||
+                (!sharedData && game.path == allowedRoot.path)
+            ) return@runCatching null
             val version = json.getString("versionId").also(::requireSafeVersion)
             val baseVersion = json.optString("minecraftVersion", version).also(::requireSafeVersion)
             GameInstance(
@@ -377,7 +415,9 @@ class GameInstanceRepository(context: Context) {
                 rendererId = json.optString("rendererId").takeIf { it.isNotBlank() },
                 javaArgs = json.optString("javaArgs").takeIf { it.isNotBlank() },
                 selectedRuntime = json.optString("selectedRuntime").takeIf { it.isNotBlank() },
-                controlLayout = json.optString("controlLayout").takeIf { it.isNotBlank() }
+                controlLayout = json.optString("controlLayout").takeIf { it.isNotBlank() },
+                argsMode = json.optInt("argsMode", 0).coerceIn(0, 2),
+                sharedData = sharedData
             )
         }.getOrNull()
     }
@@ -400,6 +440,8 @@ class GameInstanceRepository(context: Context) {
             .put("javaArgs", instance.javaArgs ?: "")
             .put("selectedRuntime", instance.selectedRuntime ?: "")
             .put("controlLayout", instance.controlLayout ?: "")
+            .put("argsMode", instance.argsMode.coerceIn(0, 2))
+            .put("sharedData", instance.sharedData)
         writeAtomically(File(folder, META_FILE), json.toString(2))
     }
 
