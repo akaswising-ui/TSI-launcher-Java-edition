@@ -59,6 +59,10 @@ class JavaGameInstaller(
         val requiredJava = metadata.optJSONObject("javaVersion")
             ?.optInt("majorVersion")
             ?.takeIf { it in 8..99 }
+            ?: MinecraftJavaCompatibility.fallbackJavaMajorFor(
+                version.id,
+                metadata.has("minecraftArguments")
+            )
 
         // Some older Mojang manifests omit ASM's standalone core artifact even
         // though LaunchWrapper's VanillaTweaker loads org.objectweb.asm classes.
@@ -140,68 +144,106 @@ class JavaGameInstaller(
             }
         }
 
+        var assetIndexId = ""
+        var totalAssets = 0
         val assetIndex = metadata.optJSONObject("assetIndex")
-            ?: throw IOException("Version metadata does not contain an asset index")
-        val assetIndexId = assetIndex.optString("id")
-        val assetIndexUrl = assetIndex.optString("url")
-        require(assetIndexId.isNotBlank() && assetIndexUrl.isNotBlank()) {
-            "Asset index metadata is incomplete"
-        }
+        if (assetIndex != null) {
+            assetIndexId = assetIndex.optString("id")
+                .takeIf { it.isNotBlank() }
+                ?: throw IOException("Asset index metadata has no ID")
+            val assetIndexUrl = assetIndex.optString("url")
+            require(assetIndexUrl.isNotBlank()) { "Asset index metadata has no download URL" }
 
-        val assetIndexesDir = File(paths.sharedAssetsDirectory, "indexes")
-        ensureDirectory(assetIndexesDir)
-        val assetIndexFile = File(assetIndexesDir, "$assetIndexId.json")
-        val assetIndexSha = assetIndex.optString("sha1")
-            .takeIf { it.matches(Regex("[a-fA-F0-9]{40}")) }
-        val assetIndexSize = assetIndex.optLong("size", -1L)
-        if (!isVerifiedFile(assetIndexFile, assetIndexSha, assetIndexSize)) {
-            progress("Downloading asset index $assetIndexId…")
-            downloadVerified(assetIndexUrl, assetIndexFile, assetIndexSha, assetIndexSize)
-        }
-
-        val assetIndexJson = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
-        val objects = assetIndexJson.optJSONObject("objects")
-            ?: throw IOException("Asset index has no objects map")
-        val assetEntries = ArrayList<Pair<String, String>>(objects.length())
-        val iterator = objects.keys()
-        while (iterator.hasNext()) {
-            val name = iterator.next()
-            val hash = objects.optJSONObject(name)?.optString("hash").orEmpty().lowercase(Locale.ROOT)
-            if (!hash.matches(Regex("[a-f0-9]{40}"))) {
-                throw IOException("Invalid asset hash in asset index: $name")
+            val assetIndexesDir = File(paths.sharedAssetsDirectory, "indexes")
+            ensureDirectory(assetIndexesDir)
+            val assetIndexFile = File(assetIndexesDir, "$assetIndexId.json")
+            val assetIndexSha = assetIndex.optString("sha1")
+                .takeIf { it.matches(Regex("[a-fA-F0-9]{40}")) }
+            val assetIndexSize = assetIndex.optLong("size", -1L)
+            if (!isVerifiedFile(assetIndexFile, assetIndexSha, assetIndexSize)) {
+                progress("Downloading asset index $assetIndexId…")
+                downloadVerified(assetIndexUrl, assetIndexFile, assetIndexSha, assetIndexSize)
             }
-            assetEntries.add(name to hash)
-        }
 
-        val assetObjectsDir = File(paths.sharedAssetsDirectory, "objects")
-        ensureDirectory(assetObjectsDir)
-        val finished = AtomicInteger(0)
-        val totalAssets = assetEntries.size
-        progress("Checking $totalAssets Minecraft assets…")
+            val assetIndexJson = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
+            val objects = assetIndexJson.optJSONObject("objects")
+                ?: throw IOException("Asset index has no objects map")
+            val assetEntries = ArrayList<Pair<String, String>>(objects.length())
+            val iterator = objects.keys()
+            while (iterator.hasNext()) {
+                val name = iterator.next()
+                val hash = objects.optJSONObject(name)?.optString("hash").orEmpty().lowercase(Locale.ROOT)
+                if (!hash.matches(Regex("[a-f0-9]{40}"))) {
+                    throw IOException("Invalid asset hash in asset index: $name")
+                }
+                assetEntries.add(name to hash)
+            }
 
-        // Bounded parallel downloads prevent a large asset index from creating
-        // thousands of simultaneous network requests on Android.
-        val semaphore = Semaphore(5)
-        assetEntries.chunked(40).forEach { chunk ->
-            coroutineScope {
-                chunk.map { (_, hash) ->
-                    async(Dispatchers.IO) {
-                        semaphore.withPermit {
-                            val prefix = hash.substring(0, 2)
-                            val folder = File(assetObjectsDir, prefix)
-                            ensureDirectory(folder)
-                            val destination = File(folder, hash)
-                            if (!isVerifiedFile(destination, hash, -1L)) {
-                                val assetUrl = "https://resources.download.minecraft.net/$prefix/$hash"
-                                downloadVerified(assetUrl, destination, hash, -1L)
-                            }
-                            val done = finished.incrementAndGet()
-                            if (done % 50 == 0 || done == totalAssets) {
-                                progress("Minecraft assets: $done / $totalAssets")
+            val assetObjectsDir = File(paths.sharedAssetsDirectory, "objects")
+            ensureDirectory(assetObjectsDir)
+            val finished = AtomicInteger(0)
+            totalAssets = assetEntries.size
+            val uniqueAssetHashes = MinecraftAssetLayout.uniqueObjectHashes(assetEntries)
+            val uniqueObjectCount = uniqueAssetHashes.size
+            progress("Checking $totalAssets Minecraft assets ($uniqueObjectCount unique objects)…")
+
+            // An asset index can map multiple names to the same SHA-1. Download
+            // each shared object once so parallel tasks never race on the same
+            // destination or its .part file.
+            val semaphore = Semaphore(5)
+            uniqueAssetHashes.chunked(40).forEach { chunk ->
+                coroutineScope {
+                    chunk.map { hash ->
+                        async(Dispatchers.IO) {
+                            semaphore.withPermit {
+                                val prefix = hash.substring(0, 2)
+                                val folder = File(assetObjectsDir, prefix)
+                                ensureDirectory(folder)
+                                val destination = File(folder, hash)
+                                if (!isVerifiedFile(destination, hash, -1L)) {
+                                    val assetUrl = "https://resources.download.minecraft.net/$prefix/$hash"
+                                    downloadVerified(assetUrl, destination, hash, -1L)
+                                }
+                                val done = finished.incrementAndGet()
+                                if (done % 50 == 0 || done == uniqueObjectCount) {
+                                    progress("Minecraft asset objects: $done / $uniqueObjectCount")
+                                }
                             }
                         }
+                    }.awaitAll()
+                }
+            }
+
+            val mapToResources = assetIndexJson.optBoolean("map_to_resources", false)
+            val virtualAssets = assetIndexJson.optBoolean("virtual", false)
+            val legacyAssets = if (mapToResources || virtualAssets) {
+                val legacyEntries = buildList {
+                    val names = objects.keys()
+                    while (names.hasNext()) {
+                        val name = names.next()
+                        val descriptor = objects.optJSONObject(name)
+                            ?: throw IOException("Invalid legacy asset entry: " + name)
+                        add(
+                            MinecraftLegacyAsset(
+                                name = name,
+                                hash = descriptor.optString("hash"),
+                                size = descriptor.optLong("size", -1L)
+                            )
+                        )
                     }
-                }.awaitAll()
+                }
+                MinecraftAssetLayout.materialize(
+                    virtualAssets,
+                    mapToResources,
+                    legacyEntries,
+                    paths.sharedAssetsDirectory,
+                    File(paths.sharedAssetsDirectory.parentFile ?: paths.sharedAssetsDirectory, "resources")
+                )
+            } else {
+                0
+            }
+            if (legacyAssets > 0) {
+                progress("Prepared " + legacyAssets + " legacy asset paths for older Minecraft versions.")
             }
         }
 

@@ -116,6 +116,20 @@ jobs:
               if not usable_abis:
                   raise SystemExit("APK has no ABI containing all Amethyst JVM/native host libraries.")
 
+              # Both supported Android ARM ABI families must be packaged.
+              # Checking only "some ABI exists" lets a successful CI build ship
+              # an APK that cannot start its native JVM on a common phone ABI.
+              required_arm_abis = {"arm64-v8a", "armeabi-v7a"}
+              missing_arm_abis = sorted(
+                  abi for abi in required_arm_abis
+                  if not required_native.issubset(natives_by_abi.get(abi, set()))
+              )
+              if missing_arm_abis:
+                  raise SystemExit(
+                      "APK is missing Amethyst JVM/native host libraries for Android ABI(s): "
+                      + ", ".join(missing_arm_abis)
+                  )
+
               dex_files = [name for name in archive.namelist()
                            if name.startswith("classes") and name.endswith(".dex")]
               if not dex_files:

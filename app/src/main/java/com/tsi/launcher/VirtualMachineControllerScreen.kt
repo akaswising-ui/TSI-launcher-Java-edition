@@ -248,7 +248,7 @@ fun VirtualMachineControllerScreen(
                                         }
                                     }
                                     inspection = withContext(Dispatchers.IO) {
-                                        manager.inspect(versionId, runtimePreference)
+                                        manager.inspect(versionId, runtimePreference, instanceId)
                                     }
                                     runtimeInstallMessage = "Java $installableJava installed. Rechecking the selected version."
                                 } catch (error: Exception) {

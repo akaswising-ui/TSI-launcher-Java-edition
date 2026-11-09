@@ -3,6 +3,8 @@ package com.tsi.launcher.runtime
 import android.content.Context
 import android.os.Build
 import com.tsi.launcher.data.MinecraftLibraryResolver
+import com.tsi.launcher.data.MinecraftJavaCompatibility
+import com.tsi.launcher.data.MinecraftAssetLayout
 import com.tsi.launcher.storage.AmethystStoragePaths
 import com.tsi.launcher.storage.VersionDirectoryManager
 import org.json.JSONObject
@@ -73,10 +75,12 @@ class JavaRuntimeManager(private val context: Context) {
         var clientJarValid = false
         var libraryCount = 0
         var installedLibraryCount = 0
+        var assetIndexDeclared = false
         var assetIndexId: String? = null
         var assetIndexExists = false
         var assetObjectCount = 0
         var assetObjectTotal = 0
+        var legacyAssetFilesReady = true
 
         if (metadataFile.isFile) {
             try {
@@ -90,9 +94,15 @@ class JavaRuntimeManager(private val context: Context) {
                         ?.takeIf { it in 8..99 }
                 }
 
-                // Legacy metadata before javaVersion used Java 8.
-                if (requiredMajor == null && metadataChain.any { isLegacyVersion(it.id) }) {
-                    requiredMajor = 8
+                // Old releases, Alpha/Beta builds and older snapshots may omit
+                // javaVersion. Their legacy minecraftArguments format requires Java 8.
+                if (requiredMajor == null) {
+                    requiredMajor = metadataChain.firstNotNullOfOrNull { entry ->
+                        MinecraftJavaCompatibility.fallbackJavaMajorFor(
+                            entry.id,
+                            entry.metadata.has("minecraftArguments")
+                        )
+                    }
                 }
 
                 val clientOwner = metadataChain.firstOrNull { entry ->
@@ -137,6 +147,7 @@ class JavaRuntimeManager(private val context: Context) {
                 }
 
                 val assetOwner = metadataChain.firstOrNull { it.metadata.optJSONObject("assetIndex") != null }
+                assetIndexDeclared = assetOwner != null
                 val assetIndexMetadata = assetOwner?.metadata?.optJSONObject("assetIndex")
                 assetIndexId = assetIndexMetadata?.optString("id")?.takeIf { !it.isNullOrBlank() }
 
@@ -148,22 +159,44 @@ class JavaRuntimeManager(private val context: Context) {
                         (expectedIndexSize <= 0L || assetIndexFile.length() == expectedIndexSize)
 
                     if (assetIndexExists) {
-                        val objectMap = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
-                            .optJSONObject("objects")
+                        val assetIndexJson = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
+                        val objectMap = assetIndexJson.optJSONObject("objects")
                             ?: throw IOException("Asset index has no objects map.")
                         assetObjectTotal = objectMap.length()
                         val objectKeys = objectMap.keys()
                         val objectDirectory = File(assetsRoot, "objects")
+                        val mapToResources = assetIndexJson.optBoolean("map_to_resources", false)
+                        val virtualAssets = assetIndexJson.optBoolean("virtual", false)
+                        val legacyRoot = when {
+                            mapToResources -> File(root, "resources")
+                            virtualAssets -> File(assetsRoot, "virtual/legacy")
+                            else -> assetsRoot
+                        }
                         while (objectKeys.hasNext()) {
-                            val item = objectMap.optJSONObject(objectKeys.next()) ?: continue
+                            val assetName = objectKeys.next()
+                            val item = objectMap.optJSONObject(assetName) ?: continue
                             val hash = item.optString("hash").lowercase(Locale.ROOT)
                             if (!hash.matches(Regex("[a-f0-9]{40}"))) continue
                             val expectedSize = item.optLong("size", -1L)
                             val objectFile = File(File(objectDirectory, hash.substring(0, 2)), hash)
                             if (objectFile.isFile &&
-                                (expectedSize <= 0L || objectFile.length() == expectedSize)
+                                (expectedSize <= 0L || objectFile.length() == expectedSize) &&
+                                MinecraftAssetLayout.hasExpectedSha1(objectFile, hash)
                             ) {
                                 assetObjectCount++
+                            }
+                            if (virtualAssets || mapToResources) {
+                                val legacyFile = runCatching {
+                                    val candidate = File(legacyRoot, assetName).canonicalFile
+                                    require(candidate.path.startsWith(legacyRoot.canonicalPath + File.separator))
+                                    candidate
+                                }.getOrNull()
+                                if (legacyFile == null || !legacyFile.isFile ||
+                                    (expectedSize >= 0L && legacyFile.length() != expectedSize) ||
+                                    !MinecraftAssetLayout.hasExpectedSha1(legacyFile, hash)
+                                ) {
+                                    legacyAssetFilesReady = false
+                                }
                             }
                         }
                     }
@@ -215,13 +248,16 @@ class JavaRuntimeManager(private val context: Context) {
             if (libraryCount == 0 || installedLibraryCount < libraryCount) {
                 add("Minecraft libraries are incomplete ($installedLibraryCount/$libraryCount).")
             }
-            if (assetIndexId == null || !assetIndexExists) {
+            if (assetIndexDeclared && (assetIndexId == null || !assetIndexExists)) {
                 add("The Minecraft asset index is missing.")
             }
-            if (assetObjectTotal == 0) {
+            if (assetIndexDeclared && assetObjectTotal == 0) {
                 add("The asset index contains no readable object entries.")
-            } else if (assetObjectCount < assetObjectTotal) {
-                add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present with expected sizes).")
+            } else if (assetIndexDeclared && assetObjectCount < assetObjectTotal) {
+                add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present and SHA-1 verified).")
+            }
+            if (!legacyAssetFilesReady) {
+                add("Legacy asset paths are incomplete. Reinstall this version to rebuild the virtual/resource asset files.")
             }
             if (!engineBridgeAvailable) {
                 add("The Amethyst Android engine is not included in this build (JVM, LWJGL, SDL and native renderer bridge missing).")
@@ -449,12 +485,6 @@ class JavaRuntimeManager(private val context: Context) {
                 deviceAbis.any { it == "x86" || it.contains("x86") }
             else -> false
         }
-    }
-
-    private fun isLegacyVersion(versionId: String): Boolean {
-        val match = Regex("^(?:1\\.(\\d+))(?:\\.|$)").find(versionId) ?: return false
-        val minor = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return false
-        return minor <= 16
     }
 
     private fun safeSegment(value: String): String {
