@@ -19,6 +19,10 @@ import java.security.MessageDigest
  * those legacy paths after TSI has installed the object cache.
  */
 object MinecraftAssetLayout {
+    /** Asset indexes can map several logical names to the same SHA-1 object. */
+    fun uniqueObjectHashes(assetEntries: List<Pair<String, String>>): List<String> =
+        assetEntries.map { it.second }.distinct()
+
     fun materialize(
         assetIndex: JSONObject,
         assetsRoot: File,
