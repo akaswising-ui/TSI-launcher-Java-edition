@@ -65,7 +65,6 @@ class JavaRuntimeManager(private val context: Context) {
         directoryManager.migrateLegacyStorage()
         directoryManager.ensureVersionLayout(safeId, instanceId)
         val versionFolder = File(File(root, "versions"), safeId)
-        val clientJar = File(versionFolder, "$safeId.jar")
         val metadataFile = File(versionFolder, "$safeId.json")
         val librariesRoot = File(root, "libraries")
         val assetsRoot = File(root, "assets")
@@ -81,29 +80,44 @@ class JavaRuntimeManager(private val context: Context) {
 
         if (metadataFile.isFile) {
             try {
-                val metadata = JSONObject(metadataFile.readText(Charsets.UTF_8))
-                requiredMajor = metadata.optJSONObject("javaVersion")
-                    ?.optInt("majorVersion")
-                    ?.takeIf { it in 8..99 }
+                // Fabric/Quilt/Forge profiles commonly inherit the vanilla version.
+                // Resolve the complete metadata chain, bounded against cycles, so
+                // preflight checks the parent client JAR, libraries and asset index.
+                val metadataChain = readMetadataChain(safeId)
+                requiredMajor = metadataChain.firstNotNullOfOrNull { entry ->
+                    entry.metadata.optJSONObject("javaVersion")
+                        ?.optInt("majorVersion")
+                        ?.takeIf { it in 8..99 }
+                }
 
                 // Legacy metadata before javaVersion used Java 8.
                 if (requiredMajor == null && isLegacyVersion(safeId)) {
                     requiredMajor = 8
                 }
 
-                val clientDownload = metadata.optJSONObject("downloads")
-                    ?.optJSONObject("client")
-                val expectedClientSize = clientDownload?.optLong("size", -1L) ?: -1L
-                clientJarValid = clientJar.isFile &&
-                    (expectedClientSize <= 0L || clientJar.length() == expectedClientSize)
+                val clientOwner = metadataChain.firstOrNull { entry ->
+                    entry.metadata.optJSONObject("downloads")?.optJSONObject("client") != null
+                }
+                if (clientOwner != null) {
+                    val clientDownload = clientOwner.metadata
+                        .optJSONObject("downloads")?.optJSONObject("client")
+                    val expectedClientSize = clientDownload?.optLong("size", -1L) ?: -1L
+                    val clientJar = File(
+                        File(File(root, "versions"), clientOwner.id),
+                        clientOwner.id + ".jar"
+                    )
+                    clientJarValid = clientJar.isFile &&
+                        (expectedClientSize <= 0L || clientJar.length() == expectedClientSize)
+                }
 
-                val libraries = metadata.optJSONArray("libraries")
-                if (libraries != null) {
+                // Merge the artifacts declared by the child and its parents, while
+                // counting identical Maven paths only once.
+                val libraryArtifacts = linkedMapOf<String, Pair<File, Long>>()
+                metadataChain.forEach { entry ->
+                    val libraries = entry.metadata.optJSONArray("libraries") ?: return@forEach
                     for (index in 0 until libraries.length()) {
                         val library = libraries.optJSONObject(index) ?: continue
                         if (!libraryAllowed(library)) continue
-                        // Use the same resolver as installation so legacy
-                        // pre-1.13 libraries are included in the VM preflight.
                         val artifact = MinecraftLibraryResolver.resolve(library) ?: continue
                         val relativePath = artifact.path
                         if (relativePath.isBlank() || relativePath.startsWith("/") ||
@@ -113,24 +127,21 @@ class JavaRuntimeManager(private val context: Context) {
                         val libraryRoot = librariesRoot.canonicalFile
                         val local = File(librariesRoot, relativePath).canonicalFile
                         if (!local.path.startsWith(libraryRoot.path + File.separator)) continue
-
-                        libraryCount++
-                        val expectedSize = artifact.size
-                        if (local.isFile && local.length() > 0L &&
-                            (expectedSize <= 0L || local.length() == expectedSize)
-                        ) {
-                            installedLibraryCount++
-                        }
+                        libraryArtifacts[relativePath] = local to artifact.size
                     }
                 }
+                libraryCount = libraryArtifacts.size
+                installedLibraryCount = libraryArtifacts.values.count { (local, expectedSize) ->
+                    local.isFile && local.length() > 0L &&
+                        (expectedSize <= 0L || local.length() == expectedSize)
+                }
 
-                assetIndexId = metadata.optJSONObject("assetIndex")
-                    ?.optString("id")
-                    ?.takeIf { !it.isNullOrBlank() }
+                val assetOwner = metadataChain.firstOrNull { it.metadata.optJSONObject("assetIndex") != null }
+                val assetIndexMetadata = assetOwner?.metadata?.optJSONObject("assetIndex")
+                assetIndexId = assetIndexMetadata?.optString("id")?.takeIf { !it.isNullOrBlank() }
 
                 if (assetIndexId != null) {
                     val assetIndexFile = File(File(assetsRoot, "indexes"), "$assetIndexId.json")
-                    val assetIndexMetadata = metadata.optJSONObject("assetIndex")
                     val expectedIndexSize = assetIndexMetadata?.optLong("size", -1L) ?: -1L
                     assetIndexExists = assetIndexFile.isFile &&
                         assetIndexFile.length() > 0L &&
@@ -158,7 +169,7 @@ class JavaRuntimeManager(private val context: Context) {
                     }
                 }
             } catch (_: Exception) {
-                // Missing or corrupt metadata is reported in blockers below.
+                // Missing/cyclic/corrupt parent metadata is reported in blockers below.
             }
         }
 
@@ -223,6 +234,44 @@ class JavaRuntimeManager(private val context: Context) {
             engineBridgeAvailable = engineBridgeAvailable,
             blockers = blockers
         )
+    }
+
+    private data class VersionMetadataEntry(
+        val id: String,
+        val metadata: JSONObject
+    )
+
+    /**
+     * Returns metadata from the selected profile through its vanilla parent.
+     * A missing parent or cyclic inheritance is an installation blocker, not
+     * a successful partial preflight.
+     */
+    private fun readMetadataChain(versionId: String): List<VersionMetadataEntry> {
+        val entries = mutableListOf<VersionMetadataEntry>()
+        val visited = mutableSetOf<String>()
+        var currentId = versionId
+
+        repeat(16) {
+            if (!visited.add(currentId)) {
+                throw IOException("Minecraft version inheritance contains a cycle at $currentId.")
+            }
+            val currentFolder = File(File(root, "versions"), currentId)
+            val currentJson = File(currentFolder, "$currentId.json")
+            if (!currentJson.isFile) {
+                if (entries.isEmpty()) return emptyList()
+                throw IOException("Required inherited Minecraft metadata is missing: $currentId.")
+            }
+            val metadata = JSONObject(currentJson.readText(Charsets.UTF_8))
+            entries += VersionMetadataEntry(currentId, metadata)
+            val parentId = metadata.optString("inheritsFrom").trim()
+            if (parentId.isBlank()) return entries
+            require(parentId.matches(Regex("[A-Za-z0-9._+\\-]{1,100}"))) {
+                "Invalid inherited Minecraft version ID."
+            }
+            currentId = parentId
+        }
+
+        throw IOException("Minecraft version inheritance exceeds the 16-level safety limit.")
     }
 
     fun runtimeDirectory(): File = amethystRuntimeRoot
