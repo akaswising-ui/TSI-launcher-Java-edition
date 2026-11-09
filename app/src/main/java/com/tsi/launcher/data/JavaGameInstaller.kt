@@ -59,6 +59,10 @@ class JavaGameInstaller(
         val requiredJava = metadata.optJSONObject("javaVersion")
             ?.optInt("majorVersion")
             ?.takeIf { it in 8..99 }
+            ?: MinecraftJavaCompatibility.fallbackJavaMajorFor(
+                version.id,
+                metadata.has("minecraftArguments")
+            )
 
         // Some older Mojang manifests omit ASM's standalone core artifact even
         // though LaunchWrapper's VanillaTweaker loads org.objectweb.asm classes.
