@@ -19,7 +19,7 @@ class MinecraftAssetLayoutTest {
     }
 
     @Test
-    fun virtualAssetsAreMaterializedUnderAssetsRoot() {
+    fun virtualAssetsAreMaterializedUnderVirtualLegacyDirectory() {
         val root = Files.createTempDirectory("tsi-asset-virtual").toFile()
         try {
             val assets = File(root, "assets")
@@ -33,7 +33,7 @@ class MinecraftAssetLayoutTest {
             val entries = listOf(MinecraftLegacyAsset("textures/gui/icons.png", hash, bytes.size.toLong()))
 
             assertEquals(1, MinecraftAssetLayout.materialize(true, false, entries, assets, resources))
-            assertEquals(bytes.toList(), File(assets, "textures/gui/icons.png").readBytes().toList())
+            assertEquals(bytes.toList(), File(assets, "virtual/legacy/textures/gui/icons.png").readBytes().toList())
             assertEquals(1, MinecraftAssetLayout.materialize(true, false, entries, assets, resources))
         } finally {
             root.deleteRecursively()
