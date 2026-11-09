@@ -81,6 +81,8 @@ fun GameInstanceManagerScreen(
     var deleteTarget by remember { mutableStateOf<GameInstance?>(null) }
     var nameInput by rememberSaveable { mutableStateOf("") }
     var cloneSelected by rememberSaveable { mutableStateOf(false) }
+    var sharedDataInput by rememberSaveable { mutableStateOf(false) }
+    var argsModeInput by rememberSaveable { mutableStateOf(0) }
     var pendingExportId by remember { mutableStateOf<String?>(null) }
     var launchSettingsTarget by remember { mutableStateOf<GameInstance?>(null) }
     var rendererInput by rememberSaveable { mutableStateOf("") }
@@ -200,6 +202,7 @@ fun GameInstanceManagerScreen(
                 onClick = {
                     nameInput = ""
                     cloneSelected = false
+                    sharedDataInput = false
                     renameTarget = null
                     nameDialog = true
                 },
@@ -315,6 +318,7 @@ fun GameInstanceManagerScreen(
                                 runtimeInput = instance.selectedRuntime.orEmpty()
                                 controlInput = instance.controlLayout.orEmpty()
                                 javaArgsInput = instance.javaArgs.orEmpty()
+                                argsModeInput = instance.argsMode
                             }, enabled = !busy) {
                                 Text("Launch settings")
                             }
@@ -368,6 +372,10 @@ fun GameInstanceManagerScreen(
                             Checkbox(checked = cloneSelected, onCheckedChange = { cloneSelected = it })
                             Text("Copy current saves and mods", color = InstanceMuted, fontSize = 11.sp)
                         }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = sharedDataInput, onCheckedChange = { sharedDataInput = it })
+                            Text("Share saves and game files with other instances", color = InstanceMuted, fontSize = 11.sp)
+                        }
                     }
                 }
             },
@@ -380,7 +388,12 @@ fun GameInstanceManagerScreen(
                                 if (target != null) {
                                     repository.rename(target.id, nameInput)
                                 } else {
-                                    repository.create(nameInput, selectedVersionId, cloneSelected)
+                                    repository.create(
+                                        nameInput,
+                                        selectedVersionId,
+                                        cloneSelected,
+                                        sharedData = sharedDataInput
+                                    )
                                 }
                             }
                             instances = withContext(Dispatchers.IO) { repository.list() }
@@ -438,6 +451,18 @@ fun GameInstanceManagerScreen(
                         minLines = 2,
                         maxLines = 4
                     )
+                    Text("JVM argument mode", color = InstanceMuted, fontSize = 11.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        TextButton(onClick = { argsModeInput = 0 }) {
+                            Text(if (argsModeInput == 0) "✓ Replace" else "Replace")
+                        }
+                        TextButton(onClick = { argsModeInput = 1 }) {
+                            Text(if (argsModeInput == 1) "✓ Default first" else "Default first")
+                        }
+                        TextButton(onClick = { argsModeInput = 2 }) {
+                            Text(if (argsModeInput == 2) "✓ Instance first" else "Instance first")
+                        }
+                    }
                     Text(
                         "Use renderer IDs and runtime folder names shown by the embedded engine. Invalid or unavailable choices will be rejected before launch.",
                         color = InstanceMuted,
@@ -456,7 +481,8 @@ fun GameInstanceManagerScreen(
                                     rendererInput,
                                     javaArgsInput,
                                     runtimeInput,
-                                    controlInput
+                                    controlInput,
+                                    argsModeInput
                                 )
                             }
                             instances = withContext(Dispatchers.IO) { repository.list() }
