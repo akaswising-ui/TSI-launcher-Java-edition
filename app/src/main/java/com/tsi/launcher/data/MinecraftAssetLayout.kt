@@ -1,6 +1,5 @@
 package com.tsi.launcher.data
 
-import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -9,6 +8,12 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+
+data class MinecraftLegacyAsset(
+    val name: String,
+    val hash: String,
+    val size: Long
+)
 
 /**
  * Creates the paths required by older Minecraft asset loaders.
@@ -24,31 +29,26 @@ object MinecraftAssetLayout {
         assetEntries.map { it.second }.distinct()
 
     fun materialize(
-        assetIndex: JSONObject,
+        virtualAssets: Boolean,
+        mapToResources: Boolean,
+        assetObjects: Iterable<MinecraftLegacyAsset>,
         assetsRoot: File,
         resourcesRoot: File
     ): Int {
-        val virtual = assetIndex.optBoolean("virtual", false)
-        val mapToResources = assetIndex.optBoolean("map_to_resources", false)
-        if (!virtual && !mapToResources) return 0
+        if (!virtualAssets && !mapToResources) return 0
 
-        val objects = assetIndex.optJSONObject("objects")
-            ?: throw IOException("Legacy asset index has no objects map.")
         val objectRoot = File(assetsRoot, "objects").canonicalFile
         val targetRoot = (if (mapToResources) resourcesRoot else assetsRoot).canonicalFile
         ensureDirectory(targetRoot)
 
         var materialized = 0
-        val keys = objects.keys()
-        while (keys.hasNext()) {
-            val assetName = keys.next()
-            val descriptor = objects.optJSONObject(assetName)
-                ?: throw IOException("Invalid legacy asset entry: " + assetName)
-            val hash = descriptor.optString("hash").lowercase()
+        for (asset in assetObjects) {
+            val assetName = asset.name
+            val hash = asset.hash.lowercase()
             if (!hash.matches(Regex("[a-f0-9]{40}"))) {
                 throw IOException("Invalid SHA-1 for legacy asset: " + assetName)
             }
-            val expectedSize = descriptor.optLong("size", -1L)
+            val expectedSize = asset.size
             if (expectedSize < 0L) {
                 throw IOException("Missing size for legacy asset: " + assetName)
             }
