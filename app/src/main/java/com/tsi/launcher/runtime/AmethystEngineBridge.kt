@@ -304,6 +304,36 @@ object AmethystEngineBridge {
         }
     }
 
+    private fun hasClientJarInInheritanceChain(minecraftRoot: File, versionId: String): Boolean {
+        val versionsRoot = File(minecraftRoot, "versions")
+        val visited = mutableSetOf<String>()
+        var currentId = versionId
+
+        repeat(16) {
+            if (!currentId.matches(Regex("[A-Za-z0-9._+\\-]{1,100}")) || !visited.add(currentId)) {
+                return false
+            }
+            val directory = File(versionsRoot, currentId)
+            val metadataFile = File(directory, "$currentId.json")
+            val metadata = runCatching {
+                if (!metadataFile.isFile) null
+                else JSONObject(metadataFile.readText(Charsets.UTF_8))
+            }.getOrNull() ?: return false
+
+            val clientJar = File(directory, "$currentId.jar")
+            if (clientJar.isFile && clientJar.length() > 0L) {
+                val client = metadata.optJSONObject("downloads")?.optJSONObject("client")
+                val expectedSize = client?.optLong("size", -1L) ?: -1L
+                if (expectedSize <= 0L || clientJar.length() == expectedSize) return true
+            }
+
+            val parent = metadata.optString("inheritsFrom").trim()
+            if (parent.isBlank()) return false
+            currentId = parent
+        }
+        return false
+    }
+
     fun launch(
         context: Context,
         versionId: String,
@@ -338,8 +368,8 @@ object AmethystEngineBridge {
         require(File(versionDirectory, "$safeVersion.json").isFile) {
             "Minecraft $safeVersion version metadata is missing."
         }
-        require(File(versionDirectory, "$safeVersion.jar").isFile) {
-            "Minecraft $safeVersion client JAR is missing."
+        require(hasClientJarInInheritanceChain(minecraftRoot, safeVersion)) {
+            "Minecraft $safeVersion and its inherited vanilla parent do not contain a usable client JAR."
         }
 
         val instancesRoot = File(minecraftRoot, "instances").canonicalFile
