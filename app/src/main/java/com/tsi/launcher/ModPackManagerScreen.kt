@@ -51,6 +51,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.tsi.launcher.instances.GameInstance
+import com.tsi.launcher.instances.GameInstanceRepository
 import net.kdt.pojavlaunch.modloaders.modpacks.api.CommonApi
 import net.kdt.pojavlaunch.modloaders.modpacks.api.NotificationDownloadListener
 import net.kdt.pojavlaunch.modloaders.modpacks.models.ModDetail
@@ -72,7 +74,8 @@ fun ModPackManagerScreen(
     modifier: Modifier = Modifier,
     profileName: String,
     searchQuery: String,
-    onInstancesClick: () -> Unit
+    onInstancesClick: () -> Unit,
+    onInstanceImported: (GameInstance) -> Unit
 ) {
     val context = LocalContext.current
     val appContext = remember(context) { context.applicationContext }
@@ -80,6 +83,7 @@ fun ModPackManagerScreen(
     val api = remember {
         CommonApi(context.getString(net.kdt.pojavlaunch.R.string.curseforge_api_key))
     }
+    val instanceRepository = remember { GameInstanceRepository(appContext) }
 
     var packs by remember { mutableStateOf<List<ModItem>>(emptyList()) }
     var pageResult by remember { mutableStateOf<SearchResult?>(null) }
@@ -146,10 +150,26 @@ fun ModPackManagerScreen(
         }
     }
 
+    fun findNewAmethystProfile(previousKeys: Set<String>): Triple<String, String, String> {
+        val profiles = LauncherProfiles.mainProfileJson.profiles
+        val candidate = profiles.entries.firstOrNull { (key, profile) ->
+            key !in previousKeys && profile.gameDir?.replace('\\', '/')?.contains("custom_instances/") == true
+        } ?: profiles.entries.lastOrNull { (_, profile) ->
+            profile.gameDir?.replace('\\', '/')?.contains("custom_instances/") == true
+        } ?: throw IOException("Amethyst installed the modpack but did not create a selectable profile.")
+        val profile = candidate.value
+        val name = profile.name?.takeIf { it.isNotBlank() } ?: candidate.key
+        val version = profile.lastVersionId?.takeIf { it.isNotBlank() }
+            ?: throw IOException("The imported modpack profile has no Minecraft version.")
+        val gameDirectory = profile.gameDir?.takeIf { it.isNotBlank() }
+            ?: throw IOException("The imported modpack profile has no game directory.")
+        return Triple(name, version, gameDirectory)
+    }
+
     fun importSelectedFile(uri: Uri) {
         scope.launch {
             importing = true
-            statusMessage = "Importing modpack archive..."
+            statusMessage = "Importing modpack archive..." 
             try {
                 val result = withContext(Dispatchers.IO) {
                     val displayName = context.contentResolver.query(
@@ -185,6 +205,7 @@ fun ModPackManagerScreen(
                         }
 
                         LauncherProfiles.load()
+                        val previousKeys = LauncherProfiles.mainProfileJson.profiles.keys.toSet()
                         val loader = api.importModpack(archive)
                         if (loader != null) {
                             val task = loader.getDownloadTask(
@@ -192,15 +213,22 @@ fun ModPackManagerScreen(
                             )
                             task?.run()
                         }
-                        loader
+                        Pair(loader, previousKeys)
                     } finally {
                         archive.delete()
                     }
                 }
-                statusMessage = if (result == null) {
-                    "Modpack files imported. Check the launcher profile list for the new instance."
+                LauncherProfiles.load()
+                val importedInstance = withContext(Dispatchers.IO) {
+                    val (name, version, gameDirectory) = findNewAmethystProfile(result.second)
+                    instanceRepository.importInstalledModpack(name, version, gameDirectory)
+                }
+                onInstanceImported(importedInstance)
+                statusMessage = if (result.first == null) {
+                    "Modpack imported as " + importedInstance.name + "."
                 } else {
-                    "Modpack imported. Its " + result.modLoaderTypeName() + " setup task was started; Forge and NeoForge may require the installer notification."
+                    "Modpack imported as " + importedInstance.name + " (" + result.first.modLoaderTypeName() +
+                        "). Forge/NeoForge may finish through the installer notification."
                 }
             } catch (error: Exception) {
                 statusMessage = error.message ?: "Modpack import failed."
