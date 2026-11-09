@@ -65,7 +65,8 @@ jobs:
               modifier: Modifier = Modifier,
               profileName: String,
               searchQuery: String,
-              onInstancesClick: () -> Unit
+              onInstancesClick: () -> Unit,
+              onInstanceImported: (com.tsi.launcher.instances.GameInstance) -> Unit
           ) {
               Column(modifier.padding(12.dp)) {
                   Text("Mod Pack features are available in the full engine APK.")
