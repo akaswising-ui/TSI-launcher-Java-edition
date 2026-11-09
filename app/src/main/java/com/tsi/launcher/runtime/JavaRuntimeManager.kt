@@ -77,6 +77,7 @@ class JavaRuntimeManager(private val context: Context) {
         var assetIndexExists = false
         var assetObjectCount = 0
         var assetObjectTotal = 0
+        var legacyAssetFilesReady = true
 
         if (metadataFile.isFile) {
             try {
@@ -148,14 +149,18 @@ class JavaRuntimeManager(private val context: Context) {
                         (expectedIndexSize <= 0L || assetIndexFile.length() == expectedIndexSize)
 
                     if (assetIndexExists) {
-                        val objectMap = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
-                            .optJSONObject("objects")
+                        val assetIndexJson = JSONObject(assetIndexFile.readText(Charsets.UTF_8))
+                        val objectMap = assetIndexJson.optJSONObject("objects")
                             ?: throw IOException("Asset index has no objects map.")
                         assetObjectTotal = objectMap.length()
                         val objectKeys = objectMap.keys()
                         val objectDirectory = File(assetsRoot, "objects")
+                        val mapToResources = assetIndexJson.optBoolean("map_to_resources", false)
+                        val virtualAssets = assetIndexJson.optBoolean("virtual", false)
+                        val legacyRoot = if (mapToResources) File(root, "resources") else assetsRoot
                         while (objectKeys.hasNext()) {
-                            val item = objectMap.optJSONObject(objectKeys.next()) ?: continue
+                            val assetName = objectKeys.next()
+                            val item = objectMap.optJSONObject(assetName) ?: continue
                             val hash = item.optString("hash").lowercase(Locale.ROOT)
                             if (!hash.matches(Regex("[a-f0-9]{40}"))) continue
                             val expectedSize = item.optLong("size", -1L)
@@ -164,6 +169,18 @@ class JavaRuntimeManager(private val context: Context) {
                                 (expectedSize <= 0L || objectFile.length() == expectedSize)
                             ) {
                                 assetObjectCount++
+                            }
+                            if (virtualAssets || mapToResources) {
+                                val legacyFile = runCatching {
+                                    val candidate = File(legacyRoot, assetName).canonicalFile
+                                    require(candidate.path.startsWith(legacyRoot.canonicalPath + File.separator))
+                                    candidate
+                                }.getOrNull()
+                                if (legacyFile == null || !legacyFile.isFile ||
+                                    (expectedSize >= 0L && legacyFile.length() != expectedSize)
+                                ) {
+                                    legacyAssetFilesReady = false
+                                }
                             }
                         }
                     }
@@ -222,6 +239,9 @@ class JavaRuntimeManager(private val context: Context) {
                 add("The asset index contains no readable object entries.")
             } else if (assetObjectCount < assetObjectTotal) {
                 add("Minecraft assets are incomplete ($assetObjectCount/$assetObjectTotal objects are present with expected sizes).")
+            }
+            if (!legacyAssetFilesReady) {
+                add("Legacy asset paths are incomplete. Reinstall this version to rebuild the virtual/resource asset files.")
             }
             if (!engineBridgeAvailable) {
                 add("The Amethyst Android engine is not included in this build (JVM, LWJGL, SDL and native renderer bridge missing).")
