@@ -153,10 +153,12 @@ fun ModPackManagerScreen(
     fun findNewAmethystProfile(previousKeys: Set<String>): Triple<String, String, String> {
         val profiles = LauncherProfiles.mainProfileJson.profiles
         val candidate = profiles.entries.firstOrNull { (key, profile) ->
-            key !in previousKeys && profile.gameDir?.replace('\\', '/')?.contains("custom_instances/") == true
-        } ?: profiles.entries.lastOrNull { (_, profile) ->
-            profile.gameDir?.replace('\\', '/')?.contains("custom_instances/") == true
-        } ?: throw IOException("Amethyst installed the modpack but did not create a selectable profile.")
+            key !in previousKeys &&
+                profile.gameDir?.replace('\\', '/')?.contains("custom_instances/") == true
+        } ?: throw IOException(
+            "The modpack installer did not create a new selectable Java profile. " +
+                "This usually means the archive has no supported loader metadata."
+        )
         val profile = candidate.value
         val name = profile.name?.takeIf { it.isNotBlank() } ?: candidate.key
         val version = profile.lastVersionId?.takeIf { it.isNotBlank() }
