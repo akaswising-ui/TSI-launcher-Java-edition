@@ -91,9 +91,15 @@ class JavaRuntimeManager(private val context: Context) {
                         ?.takeIf { it in 8..99 }
                 }
 
-                // Legacy metadata before javaVersion used Java 8.
-                if (requiredMajor == null && metadataChain.any { isLegacyVersion(it.id) }) {
-                    requiredMajor = 8
+                // Old releases, Alpha/Beta builds and older snapshots may omit
+                // javaVersion. Their legacy minecraftArguments format requires Java 8.
+                if (requiredMajor == null) {
+                    requiredMajor = metadataChain.firstNotNullOfOrNull { entry ->
+                        MinecraftJavaCompatibility.fallbackJavaMajorFor(
+                            entry.id,
+                            entry.metadata.has("minecraftArguments")
+                        )
+                    }
                 }
 
                 val clientOwner = metadataChain.firstOrNull { entry ->
@@ -469,12 +475,6 @@ class JavaRuntimeManager(private val context: Context) {
                 deviceAbis.any { it == "x86" || it.contains("x86") }
             else -> false
         }
-    }
-
-    private fun isLegacyVersion(versionId: String): Boolean {
-        val match = Regex("^(?:1\\.(\\d+))(?:\\.|$)").find(versionId) ?: return false
-        val minor = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return false
-        return minor <= 16
     }
 
     private fun safeSegment(value: String): String {
