@@ -1057,9 +1057,9 @@ patches = [
     ),
     (
         "app_pojavlauncher/src/main/jni/ctxbridges/swap_interval_no_egl.c",
-        'LOGW("ANativeWindow version does not match. Expected %i, got %i",\\n'
+        'LOGW("ANativeWindow version does not match. Expected %i, got %i",\n'
         '                            sizeof(struct ANativeWindow_real), nativeWindowReal->common.version);',
-        'LOGW("ANativeWindow version does not match. Expected %zu, got %i",\\n'
+        'LOGW("ANativeWindow version does not match. Expected %zu, got %i",\n'
         '                            sizeof(struct ANativeWindow_real), nativeWindowReal->common.version);',
         "ANativeWindow size format",
     ),
