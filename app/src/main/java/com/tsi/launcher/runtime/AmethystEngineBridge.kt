@@ -309,7 +309,8 @@ object AmethystEngineBridge {
         versionId: String,
         heapMb: Float,
         runtime: DetectedJavaRuntime,
-        playerName: String
+        playerName: String,
+        instanceId: String = versionId
     ) {
         ensureDefaultControlMap(context)
         val safeVersion = versionId.trim()
@@ -328,6 +329,10 @@ object AmethystEngineBridge {
         ) {
             "Java ${runtime.majorVersion} is not installed in Amethyst's MultiRT folder. Return to VM Controller and install a compatible Android JRE."
         }
+        val safeInstanceId = instanceId.trim()
+        require(safeInstanceId.matches(Regex("[A-Za-z0-9._+\\-]{1,100}"))) {
+            "Invalid game instance identifier."
+        }
         val minecraftRoot = AmethystStoragePaths.minecraftHome(context)
         val versionDirectory = File(File(minecraftRoot, "versions"), safeVersion)
         require(File(versionDirectory, "$safeVersion.json").isFile) {
@@ -337,10 +342,12 @@ object AmethystEngineBridge {
             "Minecraft $safeVersion client JAR is missing."
         }
 
-        val gameDirectory = File(
-            File(File(minecraftRoot, "instances"), safeVersion),
-            "game"
-        )
+        val instancesRoot = File(minecraftRoot, "instances").canonicalFile
+        val selectedInstanceRoot = File(instancesRoot, safeInstanceId).canonicalFile
+        require(selectedInstanceRoot.path.startsWith(instancesRoot.path + File.separator)) {
+            "Selected game instance points outside the instances folder."
+        }
+        val gameDirectory = File(selectedInstanceRoot, "game")
         if (!gameDirectory.exists() && !gameDirectory.mkdirs()) {
             throw IOException("Could not create the selected Minecraft game directory.")
         }
@@ -358,7 +365,8 @@ object AmethystEngineBridge {
             versionId = safeVersion,
             runtimeName = runtime.name,
             playerName = safePlayer,
-            heapMb = safeHeapMb
+            heapMb = safeHeapMb,
+            instanceId = safeInstanceId
         )
         activateAmethystRuntime(
             context = context,
@@ -449,7 +457,8 @@ object AmethystEngineBridge {
         versionId: String,
         runtimeName: String,
         playerName: String,
-        heapMb: Int
+        heapMb: Int,
+        instanceId: String
     ) {
         val profilesFile = File(minecraftRoot, "launcher_profiles.json")
         val launcherProfiles = if (profilesFile.isFile) {
@@ -464,14 +473,14 @@ object AmethystEngineBridge {
 
         val profiles = launcherProfiles.optJSONObject("profiles") ?: JSONObject()
         val profileKey = UUID.nameUUIDFromBytes(
-            "tsi|$versionId|$playerName".toByteArray(Charsets.UTF_8)
+            ("tsi|" + versionId + "|" + playerName + "|" + instanceId).toByteArray(Charsets.UTF_8)
         ).toString()
 
         val profile = JSONObject()
-            .put("name", "TSI $versionId")
+            .put("name", "TSI " + versionId + " (" + instanceId.take(8) + ")")
             .put("type", "custom")
             .put("lastVersionId", versionId)
-            .put("gameDir", PROFILE_PREFIX + ".minecraft/instances/$versionId/game")
+            .put("gameDir", PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game")
             .put("javaDir", PROFILE_PREFIX + runtimeName)
 
         profiles.put(profileKey, profile)
