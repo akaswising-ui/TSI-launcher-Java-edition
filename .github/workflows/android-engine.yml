@@ -173,6 +173,14 @@ jobs:
               "OPEN ADVANCED ENGINE SETTINGS",
               "tsi_open_modloader_manager",
               "tsi_open_engine_settings",
+              "importInstalledModpack",
+              "TSI_ArgsMode",
+              "TSI_SharedData",
+              "pojavRendererName",
+              "controlFile",
+              "Default first",
+              "Instance first",
+              "Per-instance launch settings",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
