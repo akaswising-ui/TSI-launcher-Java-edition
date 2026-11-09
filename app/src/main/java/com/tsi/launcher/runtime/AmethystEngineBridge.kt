@@ -340,7 +340,10 @@ object AmethystEngineBridge {
         heapMb: Float,
         runtime: DetectedJavaRuntime,
         playerName: String,
-        instanceId: String = versionId
+        instanceId: String = versionId,
+        rendererId: String? = null,
+        javaArgs: String? = null,
+        controlLayout: String? = null
     ) {
         ensureDefaultControlMap(context)
         val safeVersion = versionId.trim()
@@ -388,6 +391,40 @@ object AmethystEngineBridge {
             .take(16)
             .let { if (it.length in 3..16) it else "Steve" }
 
+        val safeRendererId = rendererId?.trim()?.takeIf { it.isNotBlank() }
+        if (safeRendererId != null) {
+            require(safeRendererId.matches(Regex("[A-Za-z0-9._+-]{1,80}"))) {
+                "Invalid renderer identifier."
+            }
+            val toolsClass = Class.forName("net.kdt.pojavlaunch.Tools")
+            val compatible = toolsClass.getMethod(
+                "checkRendererCompatible",
+                Context::class.java,
+                String::class.java
+            ).invoke(null, context, safeRendererId) as? Boolean ?: false
+            require(compatible) {
+                "Renderer $safeRendererId is not available or is incompatible with this device."
+            }
+        }
+        val safeJavaArgs = javaArgs?.trim()?.takeIf { it.isNotBlank() }
+        require(safeJavaArgs == null || (safeJavaArgs.length <= 8192 && !safeJavaArgs.contains('\u0000'))) {
+            "Per-instance JVM arguments exceed the 8192-character limit or contain an invalid character."
+        }
+        val safeControlLayout = controlLayout?.trim()?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
+        if (safeControlLayout != null) {
+            require(safeControlLayout.matches(Regex("[A-Za-z0-9._+-]{1,100}")) &&
+                safeControlLayout != "." && safeControlLayout != "..") {
+                "Invalid control layout name."
+            }
+            val controlFile = File(
+                File(AmethystStoragePaths.gameHome(context), "controlmap"),
+                "$safeControlLayout.json"
+            )
+            require(controlFile.isFile && controlFile.length() > 0L) {
+                "Control layout $safeControlLayout is not installed in Amethyst's controlmap folder."
+            }
+        }
+
         val safeHeapMb = DevicePerformanceProfile.clampHeap(context, heapMb.toInt())
         writeAmethystProfile(
             context = context,
@@ -396,7 +433,10 @@ object AmethystEngineBridge {
             runtimeName = runtime.name,
             playerName = safePlayer,
             heapMb = safeHeapMb,
-            instanceId = safeInstanceId
+            instanceId = safeInstanceId,
+            rendererId = safeRendererId,
+            javaArgs = safeJavaArgs,
+            controlLayout = safeControlLayout
         )
         activateAmethystRuntime(
             context = context,
@@ -488,7 +528,10 @@ object AmethystEngineBridge {
         runtimeName: String,
         playerName: String,
         heapMb: Int,
-        instanceId: String
+        instanceId: String,
+        rendererId: String?,
+        javaArgs: String?,
+        controlLayout: String?
     ) {
         val profilesFile = File(minecraftRoot, "launcher_profiles.json")
         val launcherProfiles = if (profilesFile.isFile) {
@@ -512,6 +555,15 @@ object AmethystEngineBridge {
             .put("lastVersionId", versionId)
             .put("gameDir", PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game")
             .put("javaDir", PROFILE_PREFIX + runtimeName)
+
+        rendererId?.let { profile.put("pojavRendererName", it) }
+        javaArgs?.let { profile.put("javaArgs", it) }
+        controlLayout?.let {
+            profile.put(
+                "controlFile",
+                File(File(AmethystStoragePaths.gameHome(context), "controlmap"), "$it.json").absolutePath
+            )
+        }
 
         profiles.put(profileKey, profile)
         launcherProfiles.put("profiles", profiles)
