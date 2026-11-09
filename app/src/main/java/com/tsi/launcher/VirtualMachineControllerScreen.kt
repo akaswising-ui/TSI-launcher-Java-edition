@@ -66,6 +66,7 @@ private val VmAmber = Color(0xFFAE7729)
 fun VirtualMachineControllerScreen(
     modifier: Modifier = Modifier,
     versionId: String,
+    instanceId: String,
     ramMb: Int,
     runtimePreference: String,
     playerName: String,
@@ -97,7 +98,7 @@ fun VirtualMachineControllerScreen(
             controllerMessage = "Checking version files, JREs, libraries and assets…"
             try {
                 val result = withContext(Dispatchers.IO) {
-                    manager.inspect(versionId, runtimePreference)
+                    manager.inspect(versionId, runtimePreference, instanceId)
                 }
                 inspection = result
                 controllerMessage = if (result.readyToLaunch) {
@@ -340,7 +341,8 @@ fun VirtualMachineControllerScreen(
                                     versionId = versionId,
                                     heapMb = ramMb.toFloat(),
                                     runtime = runtime,
-                                    playerName = playerName
+                                    playerName = playerName,
+                                    instanceId = instanceId
                                 )
                             }
                         } catch (error: Exception) {
