@@ -18,6 +18,7 @@ data class GameInstance(
     val id: String,
     val name: String,
     val versionId: String,
+    val minecraftVersion: String,
     val pinned: Boolean,
     val loaderId: String?,
     val loaderVersion: String?,
@@ -73,6 +74,7 @@ class GameInstanceRepository(context: Context) {
                 id = legacyId,
                 name = "Default",
                 versionId = versionId,
+                minecraftVersion = versionId,
                 pinned = true,
                 loaderId = null,
                 loaderVersion = null,
@@ -124,7 +126,12 @@ class GameInstanceRepository(context: Context) {
     fun updateVersion(id: String, versionId: String): GameInstance {
         requireSafeVersion(versionId)
         val current = readInstance(instanceRoot(id)) ?: throw IOException("Instance not found.")
-        return current.copy(versionId = versionId).also(::writeInstance)
+        return current.copy(
+            versionId = versionId,
+            minecraftVersion = versionId,
+            loaderId = null,
+            loaderVersion = null
+        ).also(::writeInstance)
     }
 
     @Synchronized
@@ -226,7 +233,11 @@ class GameInstanceRepository(context: Context) {
                 val versionId = resolveImportedVersionId(stagedMinecraft, minecraftVersion, loader)
                 created = createInternal(instanceName, versionId, false)
                 mergeStagedMinecraft(stagedMinecraft, created.gameDirectory)
-                val completed = created.copy(loaderId = loader?.first, loaderVersion = loader?.second)
+                val completed = created.copy(
+                    minecraftVersion = minecraftVersion,
+                    loaderId = loader?.first,
+                    loaderVersion = loader?.second
+                )
                 writeInstance(completed)
                 select(completed.id)
                 return completed
@@ -251,11 +262,11 @@ class GameInstanceRepository(context: Context) {
         try {
             ZipOutputStream(BufferedOutputStream(FileOutputStream(temporary))).use { zip ->
                 val config = "InstanceType=OneSix\nname=" + instance.name +
-                    "\nIntendedVersion=" + instance.versionId + "\n"
+                    "\nIntendedVersion=" + instance.minecraftVersion + "\n"
                 addTextEntry(zip, "instance.cfg", config)
 
                 val components = JSONArray().put(
-                    JSONObject().put("uid", "net.minecraft").put("version", instance.versionId)
+                    JSONObject().put("uid", "net.minecraft").put("version", instance.minecraftVersion)
                 )
                 if (!instance.loaderId.isNullOrBlank() && !instance.loaderVersion.isNullOrBlank()) {
                     components.put(JSONObject().put("uid", instance.loaderId).put("version", instance.loaderVersion))
@@ -263,9 +274,12 @@ class GameInstanceRepository(context: Context) {
                 val pack = JSONObject().put("formatVersion", 1).put("components", components)
                 addTextEntry(zip, "mmc-pack.json", pack.toString(2))
 
-                val versionRoot = File(File(minecraftRoot, "versions"), instance.versionId)
-                if (versionRoot.isDirectory) {
-                    addTreeToZip(zip, versionRoot, ".minecraft/versions/" + instance.versionId)
+                val exportVersions = linkedSetOf(instance.minecraftVersion, instance.versionId)
+                exportVersions.forEach { version ->
+                    val versionRoot = File(File(minecraftRoot, "versions"), version)
+                    if (versionRoot.isDirectory) {
+                        addTreeToZip(zip, versionRoot, ".minecraft/versions/" + version)
+                    }
                 }
                 if (instance.gameDirectory.isDirectory) addTreeToZip(zip, instance.gameDirectory, ".minecraft")
             }
@@ -287,7 +301,9 @@ class GameInstanceRepository(context: Context) {
         ensureDirectory(folder)
         val game = File(folder, "game")
         ensureGameFolders(game)
-        val instance = GameInstance(id, name, versionId, pinned, null, null, System.currentTimeMillis(), game)
+        val instance = GameInstance(
+            id, name, versionId, versionId, pinned, null, null, System.currentTimeMillis(), game
+        )
         writeInstance(instance)
         return instance
     }
@@ -302,10 +318,12 @@ class GameInstanceRepository(context: Context) {
             val game = File(folder, "game").canonicalFile
             if (!game.path.startsWith(folder.canonicalFile.path + File.separator)) return@runCatching null
             val version = json.getString("versionId").also(::requireSafeVersion)
+            val baseVersion = json.optString("minecraftVersion", version).also(::requireSafeVersion)
             GameInstance(
                 id = id,
                 name = validateName(json.optString("name", "Minecraft instance")),
                 versionId = version,
+                minecraftVersion = baseVersion,
                 pinned = json.optBoolean("pinned", false),
                 loaderId = json.optString("loaderId").takeIf { it.isNotBlank() },
                 loaderVersion = json.optString("loaderVersion").takeIf { it.isNotBlank() },
@@ -324,6 +342,7 @@ class GameInstanceRepository(context: Context) {
             .put("id", instance.id)
             .put("name", validateName(instance.name))
             .put("versionId", instance.versionId.also(::requireSafeVersion))
+            .put("minecraftVersion", instance.minecraftVersion.also(::requireSafeVersion))
             .put("pinned", instance.pinned)
             .put("createdAt", instance.createdAt)
             .put("loaderId", instance.loaderId ?: "")
