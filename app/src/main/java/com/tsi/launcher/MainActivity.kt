@@ -187,8 +187,20 @@ private fun TsiLauncherApp() {
         mutableStateOf(AmethystEngineBridge.selectedAccountMode(context))
     }
     var ramMb by rememberSaveable {
+        val deviceKey = DevicePerformanceProfile.profileKey(context)
         val recommended = DevicePerformanceProfile.recommendedHeapMb(context)
-        val saved = preferences.getInt("ram_mb", recommended)
+        val previousDeviceKey = preferences.getString("device_profile_key", null)
+        val saved = if (previousDeviceKey != deviceKey) {
+            // Re-detect and reset to a safe automatic value after moving the app
+            // to a different RAM/ABI/CPU class. Same-device manual choices persist.
+            preferences.edit()
+                .putString("device_profile_key", deviceKey)
+                .putInt("ram_mb", recommended)
+                .apply()
+            recommended
+        } else {
+            preferences.getInt("ram_mb", recommended)
+        }
         mutableFloatStateOf(DevicePerformanceProfile.clampHeap(context, saved).toFloat())
     }
     var javaRuntime by rememberSaveable {
@@ -1373,6 +1385,7 @@ private fun SettingsScreen(
     onRequestLegacyStoragePermission: () -> Unit
 ) {
     val context = LocalContext.current
+    val deviceProfile = remember { DevicePerformanceProfile.detect(context) }
     val hasAllFilesAccess = remember(storageAccessRefreshKey) {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
     }
@@ -1387,6 +1400,36 @@ private fun SettingsScreen(
         Text("Settings", color = TsiInk, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp)
         Card(
             Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(1.dp)
+        ) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    "AUTOMATIC DEVICE PROFILE • ${deviceProfile.tierLabel.uppercase(Locale.ROOT)}",
+                    color = TsiTealDark,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+                Text(
+                    "${deviceProfile.totalPhysicalRamMb} MB physical RAM • ${deviceProfile.cpuCores} CPU cores • ${deviceProfile.primaryAbi} • ${if (deviceProfile.is64BitProcess) "64-bit" else "32-bit"}",
+                    color = TsiInk,
+                    fontSize = 12.sp
+                )
+                Text(
+                    "${deviceProfile.workerThreads} background workers • ${deviceProfile.renderDistance} chunks • recommended heap ${deviceProfile.recommendedHeapMb} MB",
+                    color = TsiMuted,
+                    fontSize = 11.sp
+                )
+                Text(
+                    "The profile is recalculated when the launcher is moved to a device with different hardware. Your manual heap choice remains saved on the same device.",
+                    color = TsiMuted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+        Card(
+            Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(2.dp)
@@ -1398,15 +1441,16 @@ private fun SettingsScreen(
                     Text("Java memory target", color = TsiInk, fontWeight = FontWeight.Bold)
                 }
                 Text("${ramMb.toInt()} MB", color = TsiTealDark, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                val maximumHeapMb = DevicePerformanceProfile.maxHeapMb(context)
+                val minimumHeapMb = deviceProfile.minimumHeapMb
+                val maximumHeapMb = deviceProfile.maximumHeapMb
                 Slider(
-                    value = ramMb.coerceIn(512f, maximumHeapMb.toFloat()),
+                    value = ramMb.coerceIn(minimumHeapMb.toFloat(), maximumHeapMb.toFloat()),
                     onValueChange = onRamChange,
-                    valueRange = 512f..maximumHeapMb.toFloat(),
-                    steps = ((maximumHeapMb - 512) / 256 - 1).coerceAtLeast(0)
+                    valueRange = minimumHeapMb.toFloat()..maximumHeapMb.toFloat(),
+                    steps = ((maximumHeapMb - minimumHeapMb) / 128 - 1).coerceAtLeast(0)
                 )
                 Text(
-                    "Recommended: ${DevicePerformanceProfile.recommendedHeapMb(context)} MB. Device-safe limit: $maximumHeapMb MB. This is a JVM heap ceiling, not total game memory.",
+                    "Recommended: ${deviceProfile.recommendedHeapMb} MB. Device-safe range: $minimumHeapMb–$maximumHeapMb MB. This is the JVM heap ceiling, not total game memory.",
                     color = TsiMuted,
                     fontSize = 11.sp
                 )
