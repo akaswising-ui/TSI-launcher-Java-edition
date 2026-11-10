@@ -390,7 +390,7 @@ object AmethystEngineBridge {
         if (!gameDirectory.exists() && !gameDirectory.mkdirs()) {
             throw IOException("Could not create the selected Minecraft game directory.")
         }
-        ensureVivoFriendlyOptions(gameDirectory)
+        ensureVivoFriendlyOptions(context, gameDirectory)
 
         val safePlayer = playerName
             .filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' }
@@ -480,20 +480,22 @@ object AmethystEngineBridge {
      * Seed lightweight graphics options for a new version instance only.
      * Existing options.txt files are never overwritten.
      */
-    private fun ensureVivoFriendlyOptions(gameDirectory: File) {
+    private fun ensureVivoFriendlyOptions(context: Context, gameDirectory: File) {
         val optionsFile = File(gameDirectory, "options.txt")
+        // Never overwrite an existing world's graphics settings.
         if (optionsFile.isFile && optionsFile.length() > 0L) return
 
+        val device = DevicePerformanceProfile.detect(context)
         val defaults = listOf(
-            "renderDistance:6",
-            "simulationDistance:4",
+            "renderDistance:${device.renderDistance}",
+            "simulationDistance:${device.simulationDistance}",
             "graphics:fast",
             "fancyGraphics:false",
             "ao:0.0",
             "entityDistanceScaling:0.5",
             "particles:1",
-            "maxFps:60",
-            "mipmapLevels:0",
+            "maxFps:${device.maxFps}",
+            "mipmapLevels:${device.mipmapLevels}",
             "biomeBlendRadius:0",
             "renderClouds:fast",
             "entityShadows:false",
