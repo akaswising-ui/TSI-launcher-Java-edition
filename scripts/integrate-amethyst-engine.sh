@@ -1130,6 +1130,198 @@ for relative_path, old, new, label in patches:
 print("Applied deterministic JNI format-string fixes.")
 PY
 
+# The original storage-check launcher activity previously had no content view.
+# On slower/older Android devices this exposed an empty window while storage and
+# engine setup ran. Give it a real startup screen and keep actionable diagnostics
+# visible if setup fails instead of leaving the user on a blank surface.
+python3 - "$AMETHYST_ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+activity_path = root / "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/TestStorageActivity.java"
+layout_path = root / "app_pojavlauncher/src/main/res/layout/activity_tsi_startup.xml"
+
+activity = activity_path.read_text()
+old_imports = """import android.widget.Toast;
+"""
+new_imports = """import android.widget.Toast;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.util.Log;
+"""
+if old_imports in activity:
+    if activity.count(old_imports) != 1:
+        raise SystemExit("Unexpected TestStorageActivity import layout.")
+    activity = activity.replace(old_imports, new_imports, 1)
+elif "import android.widget.TextView;" not in activity:
+    raise SystemExit("Could not add TSI startup view imports.")
+
+activity = activity.replace(
+    "public class TestStorageActivity extends Activity {\n    private final int REQUEST_STORAGE_REQUEST_CODE = 1;",
+    """public class TestStorageActivity extends Activity {
+    private final int REQUEST_STORAGE_REQUEST_CODE = 1;
+    private TextView startupStatus;
+    private TextView startupError;
+    private ProgressBar startupProgress;
+    private Button startupRetry;
+    private boolean launchStarted;
+""",
+    1,
+) if "private TextView startupStatus;" not in activity else activity
+
+old_on_create = """    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if(Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29 && !isStorageAllowed(this)) requestStoragePermission();
+        else exit();
+    }"""
+new_on_create = """    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_tsi_startup);
+        startupStatus = findViewById(R.id.tsi_startup_status);
+        startupError = findViewById(R.id.tsi_startup_error);
+        startupProgress = findViewById(R.id.tsi_startup_progress);
+        startupRetry = findViewById(R.id.tsi_startup_retry);
+        startupRetry.setOnClickListener(v -> exit());
+
+        if(Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29 && !isStorageAllowed(this)) {
+            startupStatus.setText("Storage permission is required to prepare Minecraft files.");
+            requestStoragePermission();
+        } else {
+            exit();
+        }
+    }"""
+if old_on_create in activity:
+    activity = activity.replace(old_on_create, new_on_create, 1)
+elif "setContentView(R.layout.activity_tsi_startup)" not in activity:
+    raise SystemExit("Could not patch TestStorageActivity.onCreate().")
+
+old_exit = """    private void exit() {
+        if(!Tools.checkStorageRoot(this)) {
+            startActivity(new Intent(this, MissingStorageActivity.class));
+            return;
+        }
+        //Initialize constants (implicitly) and preferences after we confirm that we have storage.
+        LauncherPreferences.loadPreferences(this);
+        AsyncAssetManager.unpackComponents(this);
+        AsyncAssetManager.unpackSingleFiles(this);
+
+        Intent intent =  new Intent(this, LauncherActivity.class);
+        startActivity(intent);
+        finish();
+    }"""
+new_exit = """    private void exit() {
+        if (launchStarted) return;
+        if(!Tools.checkStorageRoot(this)) {
+            startupStatus.setText("Device storage is unavailable. Check storage access and try again.");
+            startActivity(new Intent(this, MissingStorageActivity.class));
+            finish();
+            return;
+        }
+
+        launchStarted = true;
+        startupRetry.setVisibility(View.GONE);
+        startupError.setVisibility(View.GONE);
+        startupProgress.setVisibility(View.VISIBLE);
+        startupStatus.setText("Preparing TSI Launcher and Minecraft components…");
+        try {
+            // Initialize launcher paths/preferences only after storage is confirmed.
+            LauncherPreferences.loadPreferences(this);
+            startupStatus.setText("Preparing Java engine components…");
+            AsyncAssetManager.unpackComponents(this);
+            AsyncAssetManager.unpackSingleFiles(this);
+
+            Intent intent = new Intent(this, LauncherActivity.class);
+            startActivity(intent);
+            finish();
+        } catch (Throwable error) {
+            launchStarted = false;
+            Log.e("TSIStartup", "Launcher startup failed before the home screen opened.", error);
+            startupProgress.setVisibility(View.GONE);
+            startupStatus.setText("TSI Launcher could not finish opening.");
+            startupError.setText(Log.getStackTraceString(error));
+            startupError.setVisibility(View.VISIBLE);
+            startupRetry.setVisibility(View.VISIBLE);
+        }
+    }"""
+if old_exit in activity:
+    activity = activity.replace(old_exit, new_exit, 1)
+elif "Launcher startup failed before the home screen opened." not in activity:
+    raise SystemExit("Could not patch TestStorageActivity.exit().")
+
+activity_path.write_text(activity)
+
+layout = """<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#25282D">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="28dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TSI LAUNCHER"
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+        <ProgressBar
+            android:id="@+id/tsi_startup_progress"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="26dp"
+            android:indeterminate="true"
+            android:indeterminateTint="#65C7D8" />
+        <TextView
+            android:id="@+id/tsi_startup_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="Starting TSI Launcher…"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+        <TextView
+            android:id="@+id/tsi_startup_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="#333941"
+            android:padding="12dp"
+            android:textColor="#FFD6D6"
+            android:textSize="12sp"
+            android:visibility="gone" />
+        <Button
+            android:id="@+id/tsi_startup_retry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="RETRY"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>
+"""
+layout_path.write_text(layout)
+
+# Verify that the activity can no longer be built without an initial UI and
+# that its failure path exposes a stack trace and a retry action.
+if "setContentView(R.layout.activity_tsi_startup)" not in activity:
+    raise SystemExit("TSI startup screen is not attached to TestStorageActivity.")
+if "Log.getStackTraceString(error)" not in activity or "startupRetry.setVisibility(View.VISIBLE)" not in activity:
+    raise SystemExit("TSI startup failure diagnostics/retry are missing.")
+if not layout_path.is_file() or "tsi_startup_status" not in layout_path.read_text():
+    raise SystemExit("TSI startup layout was not written.")
+print("Installed visible TSI startup screen and actionable startup error reporting.")
+PY
+
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
