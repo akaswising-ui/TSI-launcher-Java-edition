@@ -166,7 +166,6 @@ jobs:
               "hasLegacyStoragePermission",
               "Lcom/tsi/launcher/runtime/DevicePerformanceProfile;",
               "Lcom/tsi/launcher/runtime/DevicePerformanceProfileSnapshot;",
-              "AUTOMATIC DEVICE PROFILE",
               "adaptive-v2",
               "Low-memory",
               "createAdaptiveExecutorService",
