@@ -144,7 +144,47 @@ application = replace_once(
     "\t\t\tif(Tools.checkStorageRoot(this)){",
     "Amethyst default preferences initialization",
 )
+# Initialize Amethyst's worker pool before any asset extraction. The number of
+# workers follows actual device RAM and CPU capacity, not a fixed four-thread pool.
+application = replace_once(
+    application,
+    "public static final ExecutorService sExecutorService = new ThreadPoolExecutor(4, 4, 500, TimeUnit.MILLISECONDS,  new LinkedBlockingQueue<>());",
+    "public static ExecutorService sExecutorService;",
+    "adaptive worker-pool declaration",
+)
+application = replace_once(
+    application,
+    "public void onCreate() {\n\t\tContextExecutor.setApplication(this);",
+    "public void onCreate() {\n\t\tsExecutorService = createAdaptiveExecutorService(this);\n\t\tContextExecutor.setApplication(this);",
+    "adaptive worker-pool initialization",
+)
+adaptive_executor = """\tprivate static ExecutorService createAdaptiveExecutorService(Context context) {
+\t\tandroid.app.ActivityManager manager =
+\t\t\t\t(android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+\t\tandroid.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
+\t\tif (manager != null) manager.getMemoryInfo(memory);
+\t\tint totalRamMb = memory.totalMem > 0L ? (int) (memory.totalMem / (1024L * 1024L)) : 4096;
+\t\tboolean lowRam = manager != null && manager.isLowRamDevice();
+\t\tint cores = Math.max(1, java.lang.Runtime.getRuntime().availableProcessors());
+\t\tint workers;
+\t\tif (lowRam || totalRamMb < 2560) workers = Math.min(2, cores);
+\t\telse if (totalRamMb < 6144) workers = Math.min(3, cores);
+\t\telse workers = Math.min(4, cores);
+\t\treturn new ThreadPoolExecutor(workers, workers, 500, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+\t}
+
+\t@Override
+\tpublic void onCreate() {"""
+application = replace_once(
+    application,
+    "\t@Override\n\tpublic void onCreate() {",
+    adaptive_executor,
+    "adaptive worker-pool factory",
+)
+if "createAdaptiveExecutorService(this)" not in application:
+    raise SystemExit("Adaptive worker pool is not initialized before Amethyst startup.")
 application_path.write_text(application)
+
 
 # Amethyst's default touch controls are packaged in assets/default.json but its
 # default CTRLDEF_FILE points to an external-files path. Ensure it exists exactly
