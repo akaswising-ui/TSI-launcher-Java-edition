@@ -47,7 +47,7 @@ public final class JavaGameInstaller {
 
     public JavaGameInstallResult install(MinecraftVersion version, String instanceId,
                                          ProgressListener progress) throws Exception {
-        if (progress == null) progress = message -> { };
+        final ProgressListener listener = progress == null ? message -> { } : progress;
         VersionPaths paths = directoryManager.ensureVersionLayout(version.getId(), instanceId);
         progress.onProgress("Fetching Minecraft " + version.getId() + " version metadata…");
 
@@ -187,7 +187,7 @@ public final class JavaGameInstaller {
                         }
                         int done = finished.incrementAndGet();
                         if (done % 50 == 0 || done == uniqueCount) {
-                            progress.onProgress("Minecraft asset objects: " + done + " / " + uniqueCount);
+                            listener.onProgress("Minecraft asset objects: " + done + " / " + uniqueCount);
                         }
                         return null;
                     }));
