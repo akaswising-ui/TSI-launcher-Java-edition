@@ -118,6 +118,23 @@ object AmethystEngineBridge {
             delay(300)
         }
 
+        // Legacy LWJGL 2 and modular LWJGL distributions can split org.lwjgl
+        // across JARs. A sealed package cannot be extended by another JAR in
+        // URLClassLoader, which is the exact failure reported by older versions.
+        val sealing = LwjglJarSanitizer.sanitize(gameRoot)
+        if (sealing.skippedSignedJars.isNotEmpty()) {
+            throw IllegalStateException(
+                "LWJGL package sealing is present in signed JAR(s) that cannot be safely rewritten: " +
+                    sealing.skippedSignedJars.joinToString()
+            )
+        }
+        if (sealing.modifiedJars > 0) {
+            progress(
+                "Repaired org.lwjgl package sealing in " +
+                    sealing.modifiedJars + " LWJGL JAR(s)."
+            )
+        }
+
         val missing = missingComponents(context)
         if (missing.isNotEmpty()) {
             throw IllegalStateException(
