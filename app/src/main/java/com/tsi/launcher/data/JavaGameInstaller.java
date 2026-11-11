@@ -151,7 +151,7 @@ public final class JavaGameInstaller {
             if (objects == null) throw new IOException("Asset index has no objects map");
             totalAssets = objects.length();
 
-            List<kotlin.Pair<String, String>> assetEntries = new ArrayList<>();
+            List<MinecraftAssetEntry> assetEntries = new ArrayList<>();
             Enumeration<String> names = java.util.Collections.enumeration(objects.keySet());
             while (names.hasMoreElements()) {
                 String name = names.nextElement();
@@ -161,7 +161,7 @@ public final class JavaGameInstaller {
                 if (!hash.matches("[a-f0-9]{40}")) {
                     throw new IOException("Invalid asset hash in asset index: " + name);
                 }
-                assetEntries.add(new kotlin.Pair<>(name, hash));
+                assetEntries.add(new MinecraftAssetEntry(name, hash));
             }
 
             File assetObjectsDirectory = new File(paths.getSharedAssetsDirectory(), "objects");
