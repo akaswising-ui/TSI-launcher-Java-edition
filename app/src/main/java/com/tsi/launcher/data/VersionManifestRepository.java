@@ -33,18 +33,22 @@ public final class VersionManifestRepository {
                 String line;
                 while ((line = reader.readLine()) != null) body.append(line);
             }
-            JSONArray versions = new JSONObject(body.toString()).getJSONArray("versions");
-            List<MinecraftVersion> result = new ArrayList<>();
-            for (int index = 0; index < versions.length(); index++) {
-                JSONObject item = versions.getJSONObject(index);
-                String id = item.optString("id");
-                String type = item.optString("type");
-                String url = item.optString("url");
-                if (!id.trim().isEmpty() && !type.trim().isEmpty() && !url.trim().isEmpty()) {
-                    result.add(new MinecraftVersion(id, type, url, item.optString("releaseTime")));
+            try {
+                JSONArray versions = new JSONObject(body.toString()).getJSONArray("versions");
+                List<MinecraftVersion> result = new ArrayList<>();
+                for (int index = 0; index < versions.length(); index++) {
+                    JSONObject item = versions.getJSONObject(index);
+                    String id = item.optString("id");
+                    String type = item.optString("type");
+                    String url = item.optString("url");
+                    if (!id.trim().isEmpty() && !type.trim().isEmpty() && !url.trim().isEmpty()) {
+                        result.add(new MinecraftVersion(id, type, url, item.optString("releaseTime")));
+                    }
                 }
+                return result;
+            } catch (org.json.JSONException error) {
+                throw new IOException("Mojang version manifest JSON is invalid.", error);
             }
-            return result;
         } finally {
             connection.disconnect();
         }
