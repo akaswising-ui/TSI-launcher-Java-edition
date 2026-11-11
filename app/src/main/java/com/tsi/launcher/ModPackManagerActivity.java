@@ -410,18 +410,18 @@ public final class ModPackManagerActivity extends Activity {
         throw new NoSuchMethodException(receiver.getClass().getName() + "." + name);
     }
 
-    private Object property(Object object, String name) throws Exception {
+    private Object property(Object object, String name) {
         if (object == null) return null;
         String cap = capitalize(name);
-        for (String method : new String[]{"get" + cap, "is" + cap}) {
-            try { return object.getClass().getMethod(method).invoke(object); }
-            catch (NoSuchMethodException ignored) { }
-        }
         try {
+            for (String method : new String[]{"get" + cap, "is" + cap}) {
+                try { return object.getClass().getMethod(method).invoke(object); }
+                catch (NoSuchMethodException ignored) { }
+            }
             Field field = object.getClass().getDeclaredField(name);
             field.setAccessible(true);
             return field.get(object);
-        } catch (NoSuchFieldException ignored) {
+        } catch (Exception ignored) {
             return null;
         }
     }
