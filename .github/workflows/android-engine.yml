@@ -153,6 +153,9 @@ jobs:
           required = [
               "Lcom/tsi/launcher/MainActivity;",
               "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
+              "Lcom/tsi/launcher/runtime/LwjglJarSanitizer;",
+              "LWJGL package sealing is present in signed JAR(s) that cannot be safely rewritten: ",
+              "Repaired org.lwjgl package sealing in ",
               "Lcom/tsi/launcher/storage/AmethystStoragePaths;",
               "Lcom/tsi/launcher/storage/VersionDirectoryManager;",
               "Lcom/tsi/launcher/instances/GameInstanceRepository;",
