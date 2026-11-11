@@ -260,13 +260,17 @@ public final class AmethystEngineBridge {
         ensureDirectory(accountsDirectory);
         File accountFile = new File(accountsDirectory, playerName + ".json");
         if (!accountFile.isFile()) {
-            JSONObject account = new JSONObject()
-                    .put("accessToken", "0")
-                    .put("clientToken", "0")
-                    .put("profileId", "00000000-0000-0000-0000-000000000000")
-                    .put("username", playerName)
-                    .put("isMicrosoft", false);
-            writeAtomically(accountFile, account.toString(2));
+            try {
+                JSONObject account = new JSONObject()
+                        .put("accessToken", "0")
+                        .put("clientToken", "0")
+                        .put("profileId", "00000000-0000-0000-0000-000000000000")
+                        .put("username", playerName)
+                        .put("isMicrosoft", false);
+                writeAtomically(accountFile, account.toString(2));
+            } catch (org.json.JSONException error) {
+                throw new IOException("Could not encode the Amethyst offline account.", error);
+            }
         } else {
             try {
                 JSONObject existing = new JSONObject(readText(accountFile));
@@ -502,25 +506,31 @@ public final class AmethystEngineBridge {
                 ("tsi|" + versionId + "|" + playerName + "|" + instanceId).getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 .toString();
 
-        JSONObject profile = new JSONObject()
-                .put("name", "TSI " + versionId + " (" +
-                        instanceId.substring(0, Math.min(8, instanceId.length())) + ")")
-                .put("type", "custom")
-                .put("lastVersionId", versionId)
-                .put("gameDir", sharedData ? PROFILE_PREFIX + "shared_dir" :
-                        PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game")
-                .put("javaDir", PROFILE_PREFIX + runtimeName);
+        final String encodedProfiles;
+        try {
+            JSONObject profile = new JSONObject()
+                    .put("name", "TSI " + versionId + " (" +
+                            instanceId.substring(0, Math.min(8, instanceId.length())) + ")")
+                    .put("type", "custom")
+                    .put("lastVersionId", versionId)
+                    .put("gameDir", sharedData ? PROFILE_PREFIX + "shared_dir" :
+                            PROFILE_PREFIX + ".minecraft/instances/" + instanceId + "/game")
+                    .put("javaDir", PROFILE_PREFIX + runtimeName);
 
-        if (rendererId != null) profile.put("pojavRendererName", rendererId);
-        if (javaArgs != null) profile.put("javaArgs", javaArgs);
-        if (controlLayout != null) {
-            profile.put("controlFile", new File(new File(AmethystStoragePaths.gameHome(context), "controlmap"),
-                    controlLayout + ".json").getAbsolutePath());
+            if (rendererId != null) profile.put("pojavRendererName", rendererId);
+            if (javaArgs != null) profile.put("javaArgs", javaArgs);
+            if (controlLayout != null) {
+                profile.put("controlFile", new File(new File(AmethystStoragePaths.gameHome(context), "controlmap"),
+                        controlLayout + ".json").getAbsolutePath());
+            }
+
+            profiles.put(profileKey, profile);
+            launcherProfiles.put("profiles", profiles);
+            encodedProfiles = launcherProfiles.toString(2);
+        } catch (org.json.JSONException error) {
+            throw new IOException("Could not encode the Amethyst game profile.", error);
         }
-
-        profiles.put(profileKey, profile);
-        launcherProfiles.put("profiles", profiles);
-        writeAtomically(profilesFile, launcherProfiles.toString(2));
+        writeAtomically(profilesFile, encodedProfiles);
 
         if (!selectedAccountIsMicrosoft(context)) addOfflineAccount(context, playerName);
 
