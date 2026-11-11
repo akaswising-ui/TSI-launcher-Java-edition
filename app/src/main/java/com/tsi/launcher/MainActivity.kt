@@ -507,9 +507,11 @@ private fun TsiLauncherApp() {
                                                 }
                                             }
                                             activeInstance = matchingInstance
-                                            val result = gameInstaller.install(version, matchingInstance.id) { progress ->
-                                                withContext(Dispatchers.Main.immediate) {
-                                                    statusMessage = progress
+                                            val result = withContext(Dispatchers.IO) {
+                                                gameInstaller.install(version, matchingInstance.id) { progress ->
+                                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                        statusMessage = progress
+                                                    }
                                                 }
                                             }
                                             val javaText = result.requiredJavaMajor?.toString() ?: "not resolved"
