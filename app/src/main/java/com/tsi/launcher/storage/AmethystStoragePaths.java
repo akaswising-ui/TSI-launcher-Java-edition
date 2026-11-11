@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
-import androidx.core.content.ContextCompat;
 import java.io.File;
 
 /** The canonical game root used by the embedded Amethyst Android launcher. */
@@ -27,9 +26,9 @@ public final class AmethystStoragePaths {
 
     public static boolean hasLegacyStoragePermission(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true;
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE)
+        return context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                && context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
     }
 }
