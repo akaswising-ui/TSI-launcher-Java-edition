@@ -152,9 +152,9 @@ public final class JavaGameInstaller {
             totalAssets = objects.length();
 
             List<MinecraftAssetEntry> assetEntries = new ArrayList<>();
-            Enumeration<String> names = java.util.Collections.enumeration(objects.keySet());
-            while (names.hasMoreElements()) {
-                String name = names.nextElement();
+            java.util.Iterator<String> names = objects.keys();
+            while (names.hasNext()) {
+                String name = names.next();
                 JSONObject descriptor = objects.optJSONObject(name);
                 String hash = descriptor == null ? "" :
                         descriptor.optString("hash").toLowerCase(Locale.ROOT);
@@ -209,9 +209,9 @@ public final class JavaGameInstaller {
             boolean virtualAssets = assetIndexJson.optBoolean("virtual", false);
             if (mapToResources || virtualAssets) {
                 List<MinecraftLegacyAsset> legacyEntries = new ArrayList<>();
-                Enumeration<String> assetNames = java.util.Collections.enumeration(objects.keySet());
-                while (assetNames.hasMoreElements()) {
-                    String name = assetNames.nextElement();
+                java.util.Iterator<String> assetNames = objects.keys();
+                while (assetNames.hasNext()) {
+                    String name = assetNames.next();
                     JSONObject descriptor = objects.optJSONObject(name);
                     if (descriptor == null) throw new IOException("Invalid legacy asset entry: " + name);
                     legacyEntries.add(new MinecraftLegacyAsset(name,
@@ -333,14 +333,23 @@ public final class JavaGameInstaller {
     }
 
     private boolean featureRulesMatch(JSONObject features) {
-        Enumeration<String> keys = java.util.Collections.enumeration(features.keySet());
-        while (keys.hasMoreElements()) {
-            String key = keys.nextElement();
+        java.util.Iterator<String> keys = features.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
             boolean expected = features.optBoolean(key, false);
             // The TSI profile does not request demo, quick-play or custom-resolution features.
             if (expected) return false;
         }
         return true;
+    }
+
+    private boolean classExists(String className) {
+        try {
+            Class.forName(className, false, context.getClassLoader());
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean regexMatches(String pattern, String value) {
