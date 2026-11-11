@@ -37,12 +37,7 @@ class VersionManifestRepository {
                     val url = item.optString("url")
                     if (id.isNotBlank() && type.isNotBlank() && url.isNotBlank()) {
                         add(
-                            MinecraftVersion(
-                                id = id,
-                                type = type,
-                                url = url,
-                                releaseTime = item.optString("releaseTime")
-                            )
+                            MinecraftVersion(id, type, url, item.optString("releaseTime"))
                         )
                     }
                 }
