@@ -320,6 +320,9 @@ launcher_activity = (
     '            android:name="com.tsi.launcher.MainActivity"\n'
     '            android:exported="false"\n'
     '            android:label="TSI Java Edition Dashboard" />\n'
+    '        <activity android:name="com.tsi.launcher.VirtualMachineControllerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.GameInstanceManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.ModPackManagerActivity" android:exported="false" />\n'
 )
 marker = '        <activity\n            android:name=".MissingStorageActivity"'
 manifest = replace_once(
