@@ -483,6 +483,23 @@ public final class JavaRuntimeManager {
         return null;
     }
 
+    private static String trimQuotes(String value) {
+        if (value == null) return "";
+        if (value.length() >= 2 && value.startsWith("\\"") && value.endsWith("\\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private static void ensureDirectory(File directory) throws IOException {
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IOException("Cannot create directory: " + directory.getAbsolutePath());
+        }
+        if (!directory.isDirectory()) {
+            throw new IOException("Expected a directory: " + directory.getAbsolutePath());
+        }
+    }
+
     private static boolean regexMatches(String pattern, String value) {
         try { return Pattern.compile(pattern).matcher(value).find(); }
         catch (Exception ignored) { return false; }
