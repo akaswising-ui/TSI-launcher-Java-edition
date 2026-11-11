@@ -29,6 +29,7 @@ import com.tsi.launcher.instances.GameInstance;
 import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.runtime.AmethystEngineBridge;
 import com.tsi.launcher.runtime.DevicePerformanceProfile;
+import com.tsi.launcher.storage.AmethystStoragePaths;
 import com.tsi.launcher.storage.VersionDirectoryManager;
 import java.io.File;
 import java.util.ArrayList;
