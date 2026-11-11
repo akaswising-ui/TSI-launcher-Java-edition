@@ -485,7 +485,7 @@ public final class JavaRuntimeManager {
 
     private static String trimQuotes(String value) {
         if (value == null) return "";
-        if (value.length() >= 2 && value.startsWith("\\"") && value.endsWith("\\"")) {
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\\"")) {
             return value.substring(1, value.length() - 1);
         }
         return value;
