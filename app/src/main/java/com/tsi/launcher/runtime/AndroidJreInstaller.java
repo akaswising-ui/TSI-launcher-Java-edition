@@ -67,7 +67,7 @@ public final class AndroidJreInstaller {
         return null;
     }
 
-    public boolean isInstalled(int javaMajor) {
+    public boolean isInstalled(int javaMajor) throws IOException {
         return findInstalledRuntime(javaMajor) != null;
     }
 
