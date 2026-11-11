@@ -381,14 +381,6 @@ public final class ModPackManagerActivity extends Activity {
         catch (Exception ignored) { type.getMethod(name).invoke(instance); }
     }
 
-    private Object makeFilters(String query) throws Exception {
-        Class<?> type = Class.forName("net.kdt.pojavlaunch.modloaders.modpacks.models.SearchFilters");
-        Object filters = type.getDeclaredConstructor().newInstance();
-        setProperty(filters, "isModpack", true);
-        setProperty(filters, "name", query);
-        return filters;
-    }
-
     private void setProperty(Object target, String property, Object value) throws Exception {
         String cap = capitalize(property);
         String[] setters = {"set" + cap, "set" + (property.startsWith("is") ? property.substring(2) : cap)};
