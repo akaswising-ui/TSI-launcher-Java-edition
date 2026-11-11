@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-import kotlin.Pair;
 
 /** Builds compatibility paths needed by legacy Minecraft asset loaders. */
 public final class MinecraftAssetLayout {
@@ -21,10 +20,10 @@ public final class MinecraftAssetLayout {
         return file.isFile() && matchesSha1(file, expected);
     }
 
-    public static List<String> uniqueObjectHashes(List<? extends Pair<String, String>> assetEntries) {
+    public static List<String> uniqueObjectHashes(List<? extends MinecraftAssetEntry> assetEntries) {
         Set<String> unique = new LinkedHashSet<>();
-        for (Pair<String, String> entry : assetEntries) {
-            if (entry != null && entry.getSecond() != null) unique.add(entry.getSecond());
+        for (MinecraftAssetEntry entry : assetEntries) {
+            if (entry != null && entry.getHash() != null) unique.add(entry.getHash());
         }
         return new ArrayList<>(unique);
     }
