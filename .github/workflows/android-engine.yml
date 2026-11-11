@@ -159,11 +159,10 @@ jobs:
               "Lcom/tsi/launcher/storage/AmethystStoragePaths;",
               "Lcom/tsi/launcher/storage/VersionDirectoryManager;",
               "Lcom/tsi/launcher/instances/GameInstanceRepository;",
-              "Lcom/tsi/launcher/instances/GameInstanceManagerScreenKt;",
-              "Game Instances",
+              "Lcom/tsi/launcher/GameInstanceManagerActivity;",
+              "GAME INSTANCES",
               "IMPORT ZIP",
-              "EXPORT",
-              "Imports and exports MultiMC / Prism instance ZIP files.",
+              "EXPORT ZIP",
               "current_instance_id",
               "migrateLegacyStorage",
               "hasLegacyStoragePermission",
@@ -185,13 +184,11 @@ jobs:
               "tsi_open_account_manager",
               "File Manager access",
               "OPEN FILE ACCESS SETTINGS",
-              "Lcom/tsi/launcher/ModPackManagerScreenKt;",
+              "Lcom/tsi/launcher/ModPackManagerActivity;",
               "IMPORT .ZIP / .MRPACK",
-              "MODRINTH",
-              "CURSEFORGE",
-              "Importing modpack archive...",
+              "Live Modrinth and CurseForge modpack catalogue",
               "OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS",
-              "OPEN ADVANCED ENGINE SETTINGS",
+              "ENGINE SETTINGS",
               "tsi_open_modloader_manager",
               "tsi_open_engine_settings",
               "importInstalledModpack",
@@ -205,8 +202,8 @@ jobs:
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
-              raise SystemExit("TSI Compose code is missing from the APK DEX: " + ", ".join(missing))
-          print("Verified TSI MainActivity and Add Offline Account UI in APK DEX.")
+              raise SystemExit("TSI Java application code is missing from the APK DEX: " + ", ".join(missing))
+          print("Verified TSI Java activities and Amethyst engine bridge in APK DEX.")
           PY
 
       - name: Stage TSI engine APK
