@@ -66,7 +66,7 @@ jobs:
           gradle-version: "9.6.1"
           validate-wrappers: false
 
-      - name: Integrate TSI Compose launcher with Amethyst engine
+      - name: Integrate Java-only TSI launcher with Amethyst engine
         run: bash scripts/integrate-amethyst-engine.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
       - name: Generate Amethyst language list
@@ -79,7 +79,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :app_pojavlauncher:assembleDebug --no-daemon --stacktrace
 
-      - name: Verify TSI Kotlin UI was compiled into the engine APK
+      - name: Verify Java launcher activities were compiled into the engine APK
         shell: bash
         run: |
           python3 - <<'PY'
@@ -152,6 +152,7 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
+              "Lcom/tsi/launcher/VirtualMachineControllerActivity;",
               "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
               "Lcom/tsi/launcher/runtime/LwjglJarSanitizer;",
               "LWJGL package sealing is present in signed JAR(s) that cannot be safely rewritten: ",
@@ -196,9 +197,6 @@ jobs:
               "TSI_SharedData",
               "pojavRendererName",
               "controlFile",
-              "Default first",
-              "Instance first",
-              "Per-instance launch settings",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
