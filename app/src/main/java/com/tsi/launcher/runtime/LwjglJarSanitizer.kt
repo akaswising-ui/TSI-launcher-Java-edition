@@ -4,9 +4,6 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.Locale
 import java.util.jar.Attributes
 import java.util.jar.JarEntry
@@ -154,15 +151,33 @@ object LwjglJarSanitizer {
             if (!temporary.isFile || temporary.length() == 0L) {
                 throw IOException("Rewritten LWJGL JAR is empty: ${jar.absolutePath}")
             }
-            try {
-                Files.move(
-                    temporary.toPath(), jar.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-                )
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temporary.toPath(), jar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            // Use same-directory renames instead of java.nio.file.Files so
+            // this remains compatible with the engine's minSdk 21.
+            val backup = File(parent, jar.name + ".tsi-original.bak")
+            if (backup.exists()) {
+                if (!jar.exists()) {
+                    if (!backup.renameTo(jar)) {
+                        throw IOException("Could not restore interrupted LWJGL backup: ${backup.absolutePath}")
+                    }
+                } else if (!backup.delete()) {
+                    throw IOException("Could not clear stale LWJGL backup: ${backup.absolutePath}")
+                }
             }
+            if (!jar.renameTo(backup)) {
+                throw IOException("Could not stage original LWJGL JAR safely: ${jar.absolutePath}")
+            }
+            if (!temporary.renameTo(jar)) {
+                if (!backup.renameTo(jar)) {
+                    throw IOException(
+                        "Could not install repaired LWJGL JAR or restore its backup. " +
+                            "Original backup remains at ${backup.absolutePath}"
+                    )
+                }
+                throw IOException("Could not install repaired LWJGL JAR: ${jar.absolutePath}")
+            }
+            // The replacement is now in place; a leftover backup is harmless
+            // and will be cleaned on the next launch if deletion fails.
+            backup.delete()
         } catch (error: Exception) {
             temporary.delete()
             if (error is IOException) throw error
