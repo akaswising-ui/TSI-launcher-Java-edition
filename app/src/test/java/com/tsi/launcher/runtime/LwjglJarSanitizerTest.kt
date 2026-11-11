@@ -58,23 +58,29 @@ class LwjglJarSanitizerTest {
         assertTrue(legacyDirectory.mkdirs())
         assertTrue(engineDirectory.mkdirs())
 
-        val manifest = Manifest().apply {
+        val unsealedManifest = Manifest().apply {
+            mainAttributes.putValue("Manifest-Version", "1.0")
+        }
+        val sealedManifest = Manifest().apply {
             mainAttributes.putValue("Manifest-Version", "1.0")
             mainAttributes.putValue("Sealed", "true")
         }
         val legacyJar = File(legacyDirectory, "lwjgl-2.9.1.jar")
         val engineJar = File(engineDirectory, "lwjgl.jar")
-        writeJar(legacyJar, manifest, listOf("org/lwjgl/AWTGLCanvas.class"))
-        writeJar(engineJar, manifest, listOf("org/lwjgl/Version.class"))
+        // Model the crash: first JAR defines org.lwjgl without sealing it,
+        // then a second JAR attempts to seal the already-loaded package.
+        writeJar(legacyJar, unsealedManifest, listOf("org/lwjgl/AWTGLCanvas.class"))
+        writeJar(engineJar, sealedManifest, listOf("org/lwjgl/Version.class"))
 
         val result = LwjglJarSanitizer.sanitize(gameRoot)
         assertEquals(2, result.scannedJars)
-        assertEquals(2, result.modifiedJars)
+        assertEquals(1, result.modifiedJars)
 
-        listOf(legacyJar, engineJar).forEach { jar ->
-            JarFile(jar, false).use {
-                assertEquals("false", it.manifest.getAttributes("org/lwjgl/")?.getValue("Sealed"))
-            }
+        JarFile(legacyJar, false).use {
+            assertNull(it.manifest.getAttributes("org/lwjgl/"))
+        }
+        JarFile(engineJar, false).use {
+            assertEquals("false", it.manifest.getAttributes("org/lwjgl/")?.getValue("Sealed"))
         }
     }
 
