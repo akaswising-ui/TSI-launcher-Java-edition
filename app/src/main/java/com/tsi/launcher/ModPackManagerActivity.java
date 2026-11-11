@@ -320,7 +320,18 @@ public final class ModPackManagerActivity extends Activity {
         if (loader == null) return;
         Class<?> listenerClass = Class.forName(
                 "net.kdt.pojavlaunch.modloaders.modpacks.api.NotificationDownloadListener");
-        Constructor<?> constructor = listenerClass.getConstructor(android.content.Context.class, loader.getClass());
+        Constructor<?> constructor = null;
+        for (Constructor<?> candidate : listenerClass.getConstructors()) {
+            Class<?>[] types = candidate.getParameterTypes();
+            if (types.length == 2 && types[0].isAssignableFrom(android.content.Context.class) &&
+                    types[1].isAssignableFrom(loader.getClass())) {
+                constructor = candidate;
+                break;
+            }
+        }
+        if (constructor == null) {
+            throw new NoSuchMethodException("NotificationDownloadListener(Context, ModLoader)");
+        }
         Object listener = constructor.newInstance(getApplicationContext(), loader);
         Object task = call(loader, "getDownloadTask", listener);
         if (task != null) call(task, "run");
