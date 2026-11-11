@@ -1315,4 +1315,4 @@ The Amethyst source tree, JNI code, renderer/input bridge, and third-party compo
 See licenses/AMETHYST-LGPL-3.0.txt and the upstream source repository for license and dependency notices.
 EOF
 
-echo "TSI Compose launcher injected into Amethyst Android engine project."
+echo "TSI Java launcher integrated into Amethyst Android engine project."
