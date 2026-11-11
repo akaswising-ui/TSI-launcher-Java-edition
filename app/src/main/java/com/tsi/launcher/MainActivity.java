@@ -20,7 +20,6 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.core.content.ContextCompat;
 import com.tsi.launcher.data.JavaGameInstallResult;
 import com.tsi.launcher.data.JavaGameInstaller;
 import com.tsi.launcher.data.MinecraftVersion;
