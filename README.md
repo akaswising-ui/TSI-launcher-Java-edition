@@ -28,7 +28,7 @@ TSI embeds the pinned Amethyst Android engine rather than reimplementing a deskt
 - **Mod loaders:** Forge, Fabric, Quilt, NeoForge and OptiFine installer paths remain in the embedded engine. TSI's integration adds shared runtime selection and inherited vanilla-version resolution.
 - **Modpacks:** The TSI Mod Pack screen now uses the embedded Modrinth + CurseForge APIs for live search, version selection, installation, and ZIP/MRPACK import. It no longer displays sample preview packs.
 - **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. They have not all been duplicated as Compose settings panels.
-- **Accounts:** Microsoft sign-in and local/offline profiles both use Amethyst's original account system. TSI's account action opens the native account selector; it does not collect Microsoft passwords in its own Compose UI. Offline profiles do not grant authenticated-server access or bypass ownership checks.
+- **Accounts:** Microsoft sign-in and local/offline profiles both use Amethyst's original account system. TSI's account action opens the native account selector; it does not collect Microsoft passwords in TSI's own screens. Offline profiles do not grant authenticated-server access or bypass ownership checks.
 
 The TSI dashboard and the original Amethyst launcher entry remain separate screens. A successful build confirms packaging and compilation, not gameplay on every Android ABI/GPU or every Minecraft release.
 
@@ -71,7 +71,7 @@ The CI workflow checks out the pinned upstream Amethyst Android source, applies 
 ./gradlew :app_pojavlauncher:assembleDebug
 ```
 
-The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-day Actions artifact, and published under that same filename in the `android-debug-latest` Release. The separate `TSI-dashboard-shell-smoke-only` artifact is only a Compose compile check and does not contain the Minecraft game engine. Do not install it as the playable launcher.
+The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-day Actions artifact, and published under that same filename in the `android-debug-latest` Release. The separate `TSI-dashboard-shell-smoke-only` artifact is a Java UI smoke test and does not contain the Minecraft game engine. Do not install it as the playable launcher.
 
 ## Scope and compatibility
 
