@@ -30,8 +30,11 @@ object LwjglJarSanitizer {
             throw IOException("Minecraft game directory is unavailable: ${gameRoot.absolutePath}")
         }
 
+        // Legacy Minecraft libraries and Amethyst's extracted LWJGL 3 assets
+        // live in different directories under the same game root.
         val roots = listOf(
             File(gameRoot, "libraries/org/lwjgl"),
+            File(gameRoot, "lwjgl3"),
             File(gameRoot, "components")
         ).filter { it.isDirectory }
 
