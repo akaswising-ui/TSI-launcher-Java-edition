@@ -144,8 +144,12 @@ public final class GameInstanceRepository {
 
     public synchronized GameInstance setPinned(String id, boolean pinned) throws IOException {
         GameInstance current = requireInstance(id);
-        GameInstance result = copy(current, null, null, pinned, null, null,
-                null, null, null, null, null);
+        GameInstance result = new GameInstance(current.getId(), current.getName(),
+                current.getVersionId(), current.getMinecraftVersion(), pinned,
+                current.getLoaderId(), current.getLoaderVersion(), current.getCreatedAt(),
+                current.getGameDirectory(), current.getRendererId(), current.getJavaArgs(),
+                current.getSelectedRuntime(), current.getControlLayout(), current.getArgsMode(),
+                current.isSharedData());
         writeInstance(result);
         return result;
     }
