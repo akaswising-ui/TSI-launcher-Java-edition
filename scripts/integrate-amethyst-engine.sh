@@ -35,28 +35,14 @@ def replace_once(text: str, old: str, new: str, description: str) -> str:
         raise SystemExit(f"Expected exactly one {description}; found {count}")
     return text.replace(old, new, 1)
 
+# TSI's app source is Java-only. Do not enable the Kotlin compiler or
+# add the Compose compiler to the embedded Amethyst application.
 text = root_gradle.read_text()
-text = replace_once(
-    text,
-    "    id 'com.android.library' version '9.3.1' apply false",
-    "    id 'com.android.library' version '9.3.1' apply false\n"
-    "    id 'org.jetbrains.kotlin.plugin.compose' version '2.4.21' apply false",
-    "root Kotlin plugin insertion",
-)
-root_gradle.write_text(text)
-
-# Amethyst upstream opts out of AGP 9 built-in Kotlin, which means the TSI
-# Compose .kt sources are silently omitted from the engine APK. Re-enable the
-# AGP-provided Kotlin compiler; do not add kotlin-android, which conflicts with
-# AGP 9 built-in Kotlin.
+if "id 'com.android.library' version '9.3.1' apply false" not in text:
+    raise SystemExit("Unexpected Amethyst root Gradle plugin layout.")
 text = gradle_properties.read_text()
-text = replace_once(
-    text,
-    "android.builtInKotlin=false",
-    "android.builtInKotlin=true",
-    "AGP built-in Kotlin enablement for TSI Compose sources",
-)
-gradle_properties.write_text(text)
+if "android.builtInKotlin=false" not in text:
+    raise SystemExit("Amethyst built-in Kotlin must remain disabled for the Java-only TSI app.")
 
 text = app_gradle.read_text()
 text = replace_once(
@@ -68,11 +54,8 @@ text = replace_once(
 text = replace_once(
     text,
     "plugins {\n    id 'com.android.application' version '9.3.1'\n}",
-    "plugins {\n"
-    "    id 'com.android.application' version '9.3.1'\n"
-    "    id 'org.jetbrains.kotlin.plugin.compose'\n"
-    "}",
-    "Amethyst app plugin block",
+    "plugins {\n    id 'com.android.application' version '9.3.1'\n}",
+    "Java-only Amethyst app plugin block",
 )
 text = replace_once(
     text,
@@ -89,8 +72,8 @@ text = replace_once(
 text = replace_once(
     text,
     "    buildFeatures {\n        prefab true\n        buildConfig true\n    }",
-    "    buildFeatures {\n        prefab true\n        buildConfig true\n        compose true\n    }",
-    "Amethyst Compose build features",
+    "    buildFeatures {\n        prefab true\n        buildConfig true\n    }",
+    "Java-only Amethyst build features",
 )
 
 for old, new, label in [
@@ -116,22 +99,13 @@ for old, new, label in [
     text = replace_once(text, old, new, label)
 
 dependency_marker = '    implementation project(":androidnsbypass")'
-compose_dependencies = (
+java_dependencies = (
     dependency_marker + "\n\n"
-    "    // TSI Launcher Compose UI and existing Java installation/controller code.\n"
-    '    implementation platform("androidx.compose:compose-bom:2025.08.00")\n'
-    '    implementation "androidx.activity:activity-compose:1.10.1"\n'
-    '    implementation "androidx.compose.animation:animation"\n'
-    '    implementation "androidx.compose.material:material-icons-extended"\n'
-    '    implementation "androidx.compose.ui:ui"\n'
-    '    implementation "androidx.compose.ui:ui-tooling-preview"\n'
-    '    implementation "androidx.compose.foundation:foundation"\n'
-    '    implementation "androidx.compose.material3:material3"\n'
-    '    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"\n'
-    '    implementation "org.tukaani:xz:1.10"\n'
-    '    debugImplementation "androidx.compose.ui:ui-tooling"'
+    "    // Amethyst's ExagearApacheCommons.jar already provides Commons Compress and Commons IO.\n"
+    "    // Do not add a second copy of those packages to the engine APK.\n"
+    '    implementation "org.tukaani:xz:1.10"'
 )
-text = replace_once(text, dependency_marker, compose_dependencies, "Amethyst dependency insertion")
+text = replace_once(text, dependency_marker, java_dependencies, "TSI Java dependency insertion")
 app_gradle.write_text(text)
 
 # Initialize the default SharedPreferences before Amethyst reads JVM/profile settings.
@@ -346,6 +320,9 @@ launcher_activity = (
     '            android:name="com.tsi.launcher.MainActivity"\n'
     '            android:exported="false"\n'
     '            android:label="TSI Java Edition Dashboard" />\n'
+    '        <activity android:name="com.tsi.launcher.VirtualMachineControllerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.GameInstanceManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.ModPackManagerActivity" android:exported="false" />\n'
 )
 marker = '        <activity\n            android:name=".MissingStorageActivity"'
 manifest = replace_once(
@@ -472,7 +449,7 @@ application = replace_once(
     "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();",
     "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();\n"
     "            try {\n"
-    "                AmethystEngineBridge.INSTANCE.ensureOfflineAccountSelected(this);\n"
+    "                AmethystEngineBridge.ensureOfflineAccountSelected(this);\n"
     "            } catch (Throwable accountError) {\n"
     "                Log.e(\"TSI Launcher\", \"Could not initialise the offline profile.\", accountError);\n"
     "            }",
@@ -1338,4 +1315,4 @@ The Amethyst source tree, JNI code, renderer/input bridge, and third-party compo
 See licenses/AMETHYST-LGPL-3.0.txt and the upstream source repository for license and dependency notices.
 EOF
 
-echo "TSI Compose launcher injected into Amethyst Android engine project."
+echo "TSI Java launcher integrated into Amethyst Android engine project."

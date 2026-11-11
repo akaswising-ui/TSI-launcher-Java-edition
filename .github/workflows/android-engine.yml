@@ -66,7 +66,7 @@ jobs:
           gradle-version: "9.6.1"
           validate-wrappers: false
 
-      - name: Integrate TSI Compose launcher with Amethyst engine
+      - name: Integrate Java-only TSI launcher with Amethyst engine
         run: bash scripts/integrate-amethyst-engine.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
       - name: Generate Amethyst language list
@@ -79,7 +79,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :app_pojavlauncher:assembleDebug --no-daemon --stacktrace
 
-      - name: Verify TSI Kotlin UI was compiled into the engine APK
+      - name: Verify Java launcher activities were compiled into the engine APK
         shell: bash
         run: |
           python3 - <<'PY'
@@ -152,15 +152,18 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
+              "Lcom/tsi/launcher/VirtualMachineControllerActivity;",
               "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
+              "Lcom/tsi/launcher/runtime/LwjglJarSanitizer;",
+              "LWJGL package sealing is present in signed JAR(s) that cannot be safely rewritten: ",
+              "Repaired org.lwjgl package sealing in ",
               "Lcom/tsi/launcher/storage/AmethystStoragePaths;",
               "Lcom/tsi/launcher/storage/VersionDirectoryManager;",
               "Lcom/tsi/launcher/instances/GameInstanceRepository;",
-              "Lcom/tsi/launcher/instances/GameInstanceManagerScreenKt;",
-              "Game Instances",
+              "Lcom/tsi/launcher/GameInstanceManagerActivity;",
+              "GAME INSTANCES",
               "IMPORT ZIP",
-              "EXPORT",
-              "Imports and exports MultiMC / Prism instance ZIP files.",
+              "EXPORT ZIP",
               "current_instance_id",
               "migrateLegacyStorage",
               "hasLegacyStoragePermission",
@@ -176,19 +179,18 @@ jobs:
               "ensureRuntimeForInstaller",
               "isRuntimeUsable",
               "No compatible Android Java runtime found for Minecraft Java ",
-              "MICROSOFT ACCOUNT",
               "Lnet/kdt/pojavlaunch/fragments/SelectAuthFragment;",
               "Lnet/kdt/pojavlaunch/fragments/MicrosoftLoginFragment;",
+              "Lnet/kdt/pojavlaunch/fragments/LocalLoginFragment;",
               "tsi_open_account_manager",
-              "File Manager access",
-              "OPEN FILE ACCESS SETTINGS",
-              "Lcom/tsi/launcher/ModPackManagerScreenKt;",
+              "Lnet/kdt/pojavlaunch/TestStorageActivity;",
+              "Lnet/kdt/pojavlaunch/MissingStorageActivity;",
+              "Lnet/kdt/pojavlaunch/fragments/FileSelectorFragment;",
+              "Lcom/tsi/launcher/ModPackManagerActivity;",
               "IMPORT .ZIP / .MRPACK",
-              "MODRINTH",
-              "CURSEFORGE",
-              "Importing modpack archive...",
+              "Live Modrinth and CurseForge modpack catalogue",
               "OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS",
-              "OPEN ADVANCED ENGINE SETTINGS",
+              "ENGINE SETTINGS",
               "tsi_open_modloader_manager",
               "tsi_open_engine_settings",
               "importInstalledModpack",
@@ -196,14 +198,11 @@ jobs:
               "TSI_SharedData",
               "pojavRendererName",
               "controlFile",
-              "Default first",
-              "Instance first",
-              "Per-instance launch settings",
           ]
           missing = [item for item in required if item not in dex_strings]
           if missing:
-              raise SystemExit("TSI Compose code is missing from the APK DEX: " + ", ".join(missing))
-          print("Verified TSI MainActivity and Add Offline Account UI in APK DEX.")
+              raise SystemExit("TSI Java application code is missing from the APK DEX: " + ", ".join(missing))
+          print("Verified TSI Java activities and Amethyst engine bridge in APK DEX.")
           PY
 
       - name: Stage TSI engine APK

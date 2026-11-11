@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TSI-Launcher"
-include(":app")
+rootProject.name = 'TSI-Launcher'
+include ':app'

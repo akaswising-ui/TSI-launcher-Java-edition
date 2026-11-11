@@ -8,7 +8,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="TSI Dashboard Shell (Not for Gameplay)"
+        android:label="TSI Launcher Java Edition"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
@@ -20,5 +20,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".VirtualMachineControllerActivity" android:exported="false" />
+        <activity android:name=".GameInstanceManagerActivity" android:exported="false" />
+        <activity android:name=".ModPackManagerActivity" android:exported="false" />
     </application>
 </manifest>
