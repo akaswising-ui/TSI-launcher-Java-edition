@@ -250,7 +250,7 @@ public final class JavaRuntimeManager {
             }
         }
 
-        boolean engineAvailable = AmethystEngineBridge.INSTANCE.isAvailable(context);
+        boolean engineAvailable = AmethystEngineBridge.isAvailable(context);
         List<String> blockers = new ArrayList<>();
         if (!AmethystStoragePaths.hasLegacyStoragePermission(context)) {
             blockers.add("Grant READ and WRITE storage permission in Android settings before using Amethyst's shared Minecraft folder.");
