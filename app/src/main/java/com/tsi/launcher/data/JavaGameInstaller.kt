@@ -225,9 +225,9 @@ class JavaGameInstaller(
                             ?: throw IOException("Invalid legacy asset entry: " + name)
                         add(
                             MinecraftLegacyAsset(
-                                name = name,
-                                hash = descriptor.optString("hash"),
-                                size = descriptor.optLong("size", -1L)
+                                name,
+                                descriptor.optString("hash"),
+                                descriptor.optLong("size", -1L)
                             )
                         )
                     }
