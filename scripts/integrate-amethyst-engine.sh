@@ -472,7 +472,7 @@ application = replace_once(
     "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();",
     "Tools.DEVICE_ARCHITECTURE = Architecture.getDeviceArchitecture();\n"
     "            try {\n"
-    "                AmethystEngineBridge.INSTANCE.ensureOfflineAccountSelected(this);\n"
+    "                AmethystEngineBridge.ensureOfflineAccountSelected(this);\n"
     "            } catch (Throwable accountError) {\n"
     "                Log.e(\"TSI Launcher\", \"Could not initialise the offline profile.\", accountError);\n"
     "            }",
