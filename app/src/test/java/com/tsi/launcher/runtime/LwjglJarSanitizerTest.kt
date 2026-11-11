@@ -51,6 +51,34 @@ class LwjglJarSanitizerTest {
     }
 
     @Test
+    fun repairsLegacyLibrariesAndExtractedLwjgl3Jars() {
+        val gameRoot = temporaryFolder.newFolder("game")
+        val legacyDirectory = File(gameRoot, "libraries/org/lwjgl/lwjgl/2.9.1")
+        val engineDirectory = File(gameRoot, "lwjgl3/3.3.3")
+        assertTrue(legacyDirectory.mkdirs())
+        assertTrue(engineDirectory.mkdirs())
+
+        val manifest = Manifest().apply {
+            mainAttributes.putValue("Manifest-Version", "1.0")
+            mainAttributes.putValue("Sealed", "true")
+        }
+        val legacyJar = File(legacyDirectory, "lwjgl-2.9.1.jar")
+        val engineJar = File(engineDirectory, "lwjgl.jar")
+        writeJar(legacyJar, manifest, listOf("org/lwjgl/AWTGLCanvas.class"))
+        writeJar(engineJar, manifest, listOf("org/lwjgl/Version.class"))
+
+        val result = LwjglJarSanitizer.sanitize(gameRoot)
+        assertEquals(2, result.scannedJars)
+        assertEquals(2, result.modifiedJars)
+
+        listOf(legacyJar, engineJar).forEach { jar ->
+            JarFile(jar, false).use {
+                assertEquals("false", it.manifest.getAttributes("org/lwjgl/")?.getValue("Sealed"))
+            }
+        }
+    }
+
+    @Test
     fun alreadyUnsealedJarIsNotModified() {
         val gameRoot = temporaryFolder.newFolder("game")
         val directory = File(gameRoot, "libraries/org/lwjgl/lwjgl/2.9.1")
