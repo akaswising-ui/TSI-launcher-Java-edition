@@ -59,12 +59,7 @@ class JavaClientInstaller(
             }
             replaceAtomically(metadataTemp, metadataFile)
 
-            ClientDownloadResult(
-                versionId = version.id,
-                clientJarPath = target.absolutePath,
-                metadataPath = metadataFile.absolutePath,
-                requiredJavaMajor = javaMajor
-            )
+            ClientDownloadResult(version.id, target.absolutePath, metadataFile.absolutePath, javaMajor)
         }
 
     private fun downloadText(rawUrl: String): String {
