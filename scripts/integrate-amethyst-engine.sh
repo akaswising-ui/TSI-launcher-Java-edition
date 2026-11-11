@@ -101,8 +101,8 @@ for old, new, label in [
 dependency_marker = '    implementation project(":androidnsbypass")'
 java_dependencies = (
     dependency_marker + "\n\n"
-    "    // TSI Java runtime installer dependencies.\n"
-    '    implementation "org.apache.commons:commons-compress:1.28.0"\n'
+    "    // Amethyst's ExagearApacheCommons.jar already provides Commons Compress and Commons IO.\n"
+    "    // Do not add a second copy of those packages to the engine APK.\n"
     '    implementation "org.tukaani:xz:1.10"'
 )
 text = replace_once(text, dependency_marker, java_dependencies, "TSI Java dependency insertion")
