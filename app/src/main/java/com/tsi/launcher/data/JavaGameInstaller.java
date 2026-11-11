@@ -49,7 +49,7 @@ public final class JavaGameInstaller {
                                          ProgressListener progress) throws Exception {
         final ProgressListener listener = progress == null ? message -> { } : progress;
         VersionPaths paths = directoryManager.ensureVersionLayout(version.getId(), instanceId);
-        progress.onProgress("Fetching Minecraft " + version.getId() + " version metadata…");
+        listener.onProgress("Fetching Minecraft " + version.getId() + " version metadata…");
 
         String metadataText = downloadText(version.getUrl());
         JSONObject metadata = new JSONObject(metadataText);
@@ -83,10 +83,10 @@ public final class JavaGameInstaller {
         long clientSize = client.optLong("size", -1L);
         File clientJar = new File(paths.getVersionDirectory(), version.getId() + ".jar");
         if (!isVerifiedFile(clientJar, clientSha1, clientSize)) {
-            progress.onProgress("Downloading Minecraft " + version.getId() + " client JAR…");
+            listener.onProgress("Downloading Minecraft " + version.getId() + " client JAR…");
             downloadVerified(clientUrl, clientJar, clientSha1, clientSize);
         } else {
-            progress.onProgress("Client JAR already verified.");
+            listener.onProgress("Client JAR already verified.");
         }
 
         JSONArray libraries = metadata.optJSONArray("libraries");
@@ -104,7 +104,7 @@ public final class JavaGameInstaller {
                     String aarPath = jnaNativeArchivePath(library, artifact);
                     File aarTarget = safeChild(paths.getSharedLibrariesDirectory(), aarPath);
                     if (!aarTarget.isFile()) {
-                        progress.onProgress("Downloading Android JNA native library…");
+                        listener.onProgress("Downloading Android JNA native library…");
                         downloadVerified("https://repo1.maven.org/maven2/" + aarPath,
                                 aarTarget, null, -1L);
                     }
@@ -116,7 +116,7 @@ public final class JavaGameInstaller {
                 File target = safeChild(paths.getSharedLibrariesDirectory(), resolved.getPath());
                 totalLibraries++;
                 if (!isVerifiedFile(target, resolved.getSha1(), resolved.getSize())) {
-                    progress.onProgress("Downloading library " + (installedLibraries + 1) +
+                    listener.onProgress("Downloading library " + (installedLibraries + 1) +
                             "/" + totalLibraries + "…");
                     downloadVerified(resolved.getUrl(), target, resolved.getSha1(), resolved.getSize());
                 }
@@ -142,7 +142,7 @@ public final class JavaGameInstaller {
             if (!assetIndexSha.matches("[a-fA-F0-9]{40}")) assetIndexSha = null;
             long assetIndexSize = assetIndex.optLong("size", -1L);
             if (!isVerifiedFile(assetIndexFile, assetIndexSha, assetIndexSize)) {
-                progress.onProgress("Downloading asset index " + assetIndexId + "…");
+                listener.onProgress("Downloading asset index " + assetIndexId + "…");
                 downloadVerified(assetIndexUrl, assetIndexFile, assetIndexSha, assetIndexSize);
             }
 
@@ -169,7 +169,7 @@ public final class JavaGameInstaller {
             List<String> uniqueHashes = MinecraftAssetLayout.uniqueObjectHashes(assetEntries);
             int uniqueCount = uniqueHashes.size();
             AtomicInteger finished = new AtomicInteger(0);
-            progress.onProgress("Checking " + totalAssets + " Minecraft assets (" +
+            listener.onProgress("Checking " + totalAssets + " Minecraft assets (" +
                     uniqueCount + " unique objects)…");
 
             ExecutorService executor = Executors.newFixedThreadPool(5);
@@ -224,7 +224,7 @@ public final class JavaGameInstaller {
                                 ? paths.getSharedAssetsDirectory()
                                 : paths.getSharedAssetsDirectory().getParentFile(), "resources"));
                 if (materialized > 0) {
-                    progress.onProgress("Prepared " + materialized +
+                    listener.onProgress("Prepared " + materialized +
                             " legacy asset paths for older Minecraft versions.");
                 }
             }
