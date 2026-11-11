@@ -468,22 +468,27 @@ public final class GameInstanceRepository {
         File folder = instanceRoot(instance.getId());
         ensureDirectory(folder);
         ensureGameFolders(instance.getGameDirectory());
-        JSONObject json = new JSONObject()
-                .put("schemaVersion", 1)
-                .put("id", instance.getId())
-                .put("name", validateName(instance.getName()))
-                .put("versionId", safeVersion(instance.getVersionId()))
-                .put("minecraftVersion", safeVersion(instance.getMinecraftVersion()))
-                .put("pinned", instance.isPinned())
-                .put("createdAt", instance.getCreatedAt())
-                .put("loaderId", orEmpty(instance.getLoaderId()))
-                .put("loaderVersion", orEmpty(instance.getLoaderVersion()))
-                .put("rendererId", orEmpty(instance.getRendererId()))
-                .put("javaArgs", orEmpty(instance.getJavaArgs()))
-                .put("selectedRuntime", orEmpty(instance.getSelectedRuntime()))
-                .put("controlLayout", orEmpty(instance.getControlLayout()))
-                .put("argsMode", Math.max(0, Math.min(2, instance.getArgsMode())))
-                .put("sharedData", instance.isSharedData());
+        final JSONObject json;
+        try {
+            json = new JSONObject()
+                    .put("schemaVersion", 1)
+                    .put("id", instance.getId())
+                    .put("name", validateName(instance.getName()))
+                    .put("versionId", safeVersion(instance.getVersionId()))
+                    .put("minecraftVersion", safeVersion(instance.getMinecraftVersion()))
+                    .put("pinned", instance.isPinned())
+                    .put("createdAt", instance.getCreatedAt())
+                    .put("loaderId", orEmpty(instance.getLoaderId()))
+                    .put("loaderVersion", orEmpty(instance.getLoaderVersion()))
+                    .put("rendererId", orEmpty(instance.getRendererId()))
+                    .put("javaArgs", orEmpty(instance.getJavaArgs()))
+                    .put("selectedRuntime", orEmpty(instance.getSelectedRuntime()))
+                    .put("controlLayout", orEmpty(instance.getControlLayout()))
+                    .put("argsMode", Math.max(0, Math.min(2, instance.getArgsMode())))
+                    .put("sharedData", instance.isSharedData());
+        } catch (org.json.JSONException error) {
+            throw new IOException("Could not encode game instance metadata.", error);
+        }
         writeAtomically(new File(folder, META_FILE), json.toString(2));
     }
 
