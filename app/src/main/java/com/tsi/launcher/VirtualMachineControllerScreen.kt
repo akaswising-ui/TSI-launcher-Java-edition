@@ -242,9 +242,11 @@ fun VirtualMachineControllerScreen(
                                 installingRuntime = true
                                 runtimeInstallMessage = "Preparing Java $installableJava download…"
                                 try {
-                                    jreInstaller.downloadAndInstall(installableJava) { update ->
-                                        withContext(Dispatchers.Main.immediate) {
-                                            runtimeInstallMessage = update
+                                    withContext(Dispatchers.IO) {
+                                        jreInstaller.downloadAndInstall(installableJava) { update ->
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                runtimeInstallMessage = update
+                                            }
                                         }
                                     }
                                     inspection = withContext(Dispatchers.IO) {
