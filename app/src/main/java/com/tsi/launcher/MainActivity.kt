@@ -269,7 +269,7 @@ private fun TsiLauncherApp() {
         isLoading = true
         statusMessage = "Contacting Mojang version manifest…"
         try {
-            versions = manifestRepository.fetchVersions()
+            versions = withContext(Dispatchers.IO) { manifestRepository.fetchVersions() }
             if (selectedVersionId.isBlank()) {
                 selectedVersionId = versions.firstOrNull { it.type == "release" }?.id.orEmpty()
             }
