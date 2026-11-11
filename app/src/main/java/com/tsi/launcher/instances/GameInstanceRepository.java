@@ -468,9 +468,9 @@ public final class GameInstanceRepository {
         File folder = instanceRoot(instance.getId());
         ensureDirectory(folder);
         ensureGameFolders(instance.getGameDirectory());
-        final JSONObject json;
+        final String encoded;
         try {
-            json = new JSONObject()
+            JSONObject json = new JSONObject()
                     .put("schemaVersion", 1)
                     .put("id", instance.getId())
                     .put("name", validateName(instance.getName()))
@@ -486,10 +486,11 @@ public final class GameInstanceRepository {
                     .put("controlLayout", orEmpty(instance.getControlLayout()))
                     .put("argsMode", Math.max(0, Math.min(2, instance.getArgsMode())))
                     .put("sharedData", instance.isSharedData());
+            encoded = json.toString(2);
         } catch (org.json.JSONException error) {
             throw new IOException("Could not encode game instance metadata.", error);
         }
-        writeAtomically(new File(folder, META_FILE), json.toString(2));
+        writeAtomically(new File(folder, META_FILE), encoded);
     }
 
     private void mergeStagedMinecraft(File staged, File gameDirectory) throws IOException {
