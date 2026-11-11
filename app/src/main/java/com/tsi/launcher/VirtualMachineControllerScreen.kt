@@ -336,25 +336,18 @@ fun VirtualMachineControllerScreen(
                     scope.launch {
                         launchingGame = true
                         try {
-                            AmethystEngineBridge.prepare(context) { update ->
-                                withContext(Dispatchers.Main.immediate) {
-                                    controllerMessage = update
+                            withContext(Dispatchers.IO) {
+                                AmethystEngineBridge.prepare(context) { update ->
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        controllerMessage = update
+                                    }
                                 }
                             }
                             withContext(Dispatchers.Main.immediate) {
                                 controllerMessage = "Starting Minecraft $versionId in the Amethyst game surface…"
                                 AmethystEngineBridge.launch(
-                                    context = context,
-                                    versionId = versionId,
-                                    heapMb = ramMb.toFloat(),
-                                    runtime = runtime,
-                                    playerName = playerName,
-                                    instanceId = instanceId,
-                                    rendererId = rendererId,
-                                    javaArgs = javaArgs,
-                                    controlLayout = controlLayout,
-                                    argsMode = argsMode,
-                                    sharedData = sharedData
+                                    context, versionId, ramMb.toFloat(), runtime, playerName,
+                                    instanceId, rendererId, javaArgs, controlLayout, argsMode, sharedData
                                 )
                             }
                         } catch (error: Exception) {
