@@ -1,6 +1,5 @@
 package com.tsi.launcher.data;
 
-import kotlin.Pair;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -24,10 +23,10 @@ public class MinecraftAssetLayoutTest {
     }
 
     @Test public void duplicateAssetHashesAreDownloadedOnlyOnce() {
-        List<Pair<String, String>> entries = Arrays.asList(
-                new Pair<>("textures/gui/icons.png", "abc"),
-                new Pair<>("textures/gui/widgets.png", "abc"),
-                new Pair<>("sounds/menu/click.ogg", "def"));
+        List<MinecraftAssetEntry> entries = Arrays.asList(
+                new MinecraftAssetEntry("textures/gui/icons.png", "abc"),
+                new MinecraftAssetEntry("textures/gui/widgets.png", "abc"),
+                new MinecraftAssetEntry("sounds/menu/click.ogg", "def"));
         assertEquals(Arrays.asList("abc", "def"), MinecraftAssetLayout.uniqueObjectHashes(entries));
     }
 
