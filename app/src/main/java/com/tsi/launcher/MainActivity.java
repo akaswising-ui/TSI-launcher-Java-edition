@@ -69,7 +69,7 @@ public final class MainActivity extends Activity {
         preferences = getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE);
         manifestRepository = new VersionManifestRepository();
         directoryManager = new VersionDirectoryManager(getApplicationContext());
-        gameInstaller = new JavaGameInstaller(directoryManager);
+        gameInstaller = new JavaGameInstaller(getApplicationContext(), directoryManager);
         instanceRepository = new GameInstanceRepository(getApplicationContext());
         buildDashboard();
         loadAccountAndInstance();
