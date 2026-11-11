@@ -132,8 +132,12 @@ public final class GameInstanceRepository {
 
     public synchronized GameInstance rename(String id, String name) throws IOException {
         GameInstance current = requireInstance(id);
-        GameInstance result = copy(current, validateName(name), null, null, null, null,
-                null, null, null, null, null);
+        GameInstance result = new GameInstance(current.getId(), validateName(name),
+                current.getVersionId(), current.getMinecraftVersion(), current.isPinned(),
+                current.getLoaderId(), current.getLoaderVersion(), current.getCreatedAt(),
+                current.getGameDirectory(), current.getRendererId(), current.getJavaArgs(),
+                current.getSelectedRuntime(), current.getControlLayout(), current.getArgsMode(),
+                current.isSharedData());
         writeInstance(result);
         return result;
     }
