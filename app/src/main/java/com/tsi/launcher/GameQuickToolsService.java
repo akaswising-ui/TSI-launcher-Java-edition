@@ -153,6 +153,7 @@ public final class GameQuickToolsService extends Service {
         addAction("RECORDINGS GALLERY", GameRecordingsGalleryActivity.class);
         addAction("FILE MANAGER", StorageFileManagerActivity.class);
         addAction("CRASH ANALYZER", CrashAnalyzerActivity.class);
+        addAction("VULKAN DRIVER PACKAGES", VulkanDriverManagerActivity.class);
         addEngineSettingsAction();
         Button hide = button("HIDE PANEL");
         hide.setOnClickListener(v -> toggleExpanded());
