@@ -3,6 +3,7 @@ package com.tsi.launcher.vulkan;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.Process;
 import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -185,7 +186,7 @@ public final class AdrenoDriverPackageManager {
             File config = new File(directory, "qgl_config.txt");
             return new DriverPackage(hash, name, author, version, library,
                     minApi, directory, config.isFile());
-        } catch (org.json.JSONException | IllegalArgumentException error) {
+        } catch (org.json.JSONException | IllegalArgumentException | IOException error) {
             return null;
         }
     }
@@ -271,7 +272,9 @@ public final class AdrenoDriverPackageManager {
                 header[2] != 'L' || header[3] != 'F') {
             throw new IOException("Declared Vulkan driver library is not an ELF shared object.");
         }
-        String abi = Build.SUPPORTED_ABIS.length == 0 ? "" : Build.SUPPORTED_ABIS[0];
+        String[] processAbis = Process.is64Bit()
+                ? Build.SUPPORTED_64_BIT_ABIS : Build.SUPPORTED_32_BIT_ABIS;
+        String abi = processAbis.length == 0 ? "" : processAbis[0];
         int expectedClass;
         int expectedMachine;
         if ("arm64-v8a".equals(abi)) { expectedClass = 2; expectedMachine = 183; }
@@ -294,7 +297,7 @@ public final class AdrenoDriverPackageManager {
     private static String requiredString(JSONObject json, String key, int maxLength) throws IOException {
         String value = json.optString(key, "").trim();
         if (value.isEmpty() || value.length() > maxLength ||
-                value.contains("\\n") || value.contains("\\r")) {
+                value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
             throw new IOException("Driver metadata field " + key + " is missing or invalid.");
         }
         return value;
