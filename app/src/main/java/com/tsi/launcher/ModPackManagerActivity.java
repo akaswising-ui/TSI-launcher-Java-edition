@@ -88,6 +88,11 @@ public final class ModPackManagerActivity extends Activity {
         importButton.setOnClickListener(v -> chooseImport());
         root.addView(importButton, matchWrap());
 
+        Button installedModsButton = button("MANAGE INSTALLED .JAR MODS");
+        installedModsButton.setOnClickListener(v ->
+                startActivity(new Intent(this, InstalledModManagerActivity.class)));
+        root.addView(installedModsButton, matchWrap());
+
         Button loadersButton = button("OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS");
         loadersButton.setOnClickListener(v -> openAmethyst("tsi_open_modloader_manager"));
         root.addView(loadersButton, matchWrap());
