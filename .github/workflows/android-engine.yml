@@ -211,7 +211,6 @@ jobs:
               "compareNumericVersions",
               "tsi.fcl.",
               "EXTERNAL RENDERER PLUGINS",
-              "Lcom/tsi/launcher/plugins/ExternalRendererRegistryVersionTest;",
               "Lcom/tsi/launcher/VulkanDriverManagerActivity;",
               "Lcom/tsi/launcher/LiteLoaderInstallActivity;",
               "Lcom/tsi/launcher/modloaders/LiteLoaderInstaller;",
