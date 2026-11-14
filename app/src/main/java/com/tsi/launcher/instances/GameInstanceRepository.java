@@ -82,6 +82,11 @@ public final class GameInstanceRepository {
         return readInstance(instanceRoot(id));
     }
 
+    /** Returns a validated instance by ID. */
+    public synchronized GameInstance get(String id) throws IOException {
+        return requireInstance(id);
+    }
+
     /** Adopts the old per-version save folder without moving or deleting it. */
     public synchronized GameInstance ensureDefault(String versionId) throws IOException {
         requireSafeVersion(versionId);
@@ -158,8 +163,16 @@ public final class GameInstanceRepository {
             String id, String rendererId, String javaArgs, String selectedRuntime,
             String controlLayout, int argsMode) throws IOException {
         GameInstance current = requireInstance(id);
+        return updateLaunchSettings(id, rendererId, javaArgs, selectedRuntime,
+                controlLayout, argsMode, current.isSharedData());
+    }
+
+    public synchronized GameInstance updateLaunchSettings(
+            String id, String rendererId, String javaArgs, String selectedRuntime,
+            String controlLayout, int argsMode, boolean sharedData) throws IOException {
+        GameInstance current = requireInstance(id);
         String safeRenderer = optionalIdentifier(rendererId, "renderer ID", 80);
-        String safeRuntime = optionalIdentifier(selectedRuntime, "runtime name", 80);
+        String safeRuntime = safeRuntimeName(selectedRuntime);
         String safeControl = optionalIdentifier(stripJson(controlLayout), "control layout name", 100);
         if (argsMode < 0 || argsMode > 2) throw new IllegalArgumentException("Unsupported JVM argument merge mode.");
         String safeArgs = javaArgs == null || javaArgs.trim().isEmpty() ? null : javaArgs.trim();
@@ -170,7 +183,7 @@ public final class GameInstanceRepository {
                 current.getVersionId(), current.getMinecraftVersion(), current.isPinned(),
                 current.getLoaderId(), current.getLoaderVersion(), current.getCreatedAt(),
                 current.getGameDirectory(), safeRenderer, safeArgs, safeRuntime, safeControl,
-                argsMode, current.isSharedData());
+                argsMode, sharedData);
         writeInstance(result);
         return result;
     }
@@ -1117,6 +1130,23 @@ public final class GameInstanceRepository {
         if (value == null) return fallback;
         try { return Integer.parseInt(value); }
         catch (NumberFormatException ignored) { return fallback; }
+    }
+
+    private static String safeRuntimeName(String value) {
+        String runtime = value == null ? "" : value.trim();
+        if (runtime.isEmpty() || "Auto".equalsIgnoreCase(runtime)) return null;
+        if (runtime.startsWith("Name:")) {
+            String name = runtime.substring(5);
+            if (!name.matches("[A-Za-z0-9._+-]{1,80}") || ".".equals(name) || "..".equals(name)) {
+                throw new IllegalArgumentException("Invalid custom runtime name.");
+            }
+            return "Name:" + name;
+        }
+        if (runtime.length() > 80 || !runtime.matches("[A-Za-z0-9._+-]+") ||
+                ".".equals(runtime) || "..".equals(runtime)) {
+            throw new IllegalArgumentException("Invalid runtime name.");
+        }
+        return runtime;
     }
 
     private static String nonBlank(String value) {
