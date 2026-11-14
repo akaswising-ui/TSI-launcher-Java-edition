@@ -400,6 +400,12 @@ public final class AmethystEngineBridge {
             if (!(compatible instanceof Boolean) || !((Boolean) compatible)) {
                 throw new IllegalArgumentException("Renderer " + safeRenderer + " is not available or incompatible.");
             }
+            if (com.tsi.launcher.plugins.ExternalRendererRegistry.isExternalRenderer(context, safeRenderer)) {
+                // Validate the plugin again immediately before launch, including its
+                // declared Minecraft version range and active-ABI native dependencies.
+                com.tsi.launcher.plugins.ExternalRendererRegistry.prepare(
+                        context, safeRenderer, safeVersion);
+            }
         }
         if (argsMode < 0 || argsMode > 2) throw new IllegalArgumentException("Unsupported JVM argument merge mode.");
         String rawArgs = javaArgs == null || javaArgs.trim().isEmpty() ? null : javaArgs.trim();
