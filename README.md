@@ -50,6 +50,8 @@ The engine integration keeps the APK debuggable, but passes `NDK_DEBUG=0` to Ame
 
 On the first launch for each game instance, TSI applies a device-aware video preset to that instance's existing `options.txt`. It reduces render/simulation distance, switches graphics to Fast, minimizes particles, disables clouds and VSync, and applies a RAM-tier FPS ceiling. The manual **APPLY FPS OPTIMIZATION** action can reapply the preset later. Unrelated settings such as audio, key bindings and resource-pack selections are preserved. Once the automatic preset has been applied, later launches do not overwrite player changes unless the device profile changes.
 
+Renderer selection is device-aware. For a new profile on Minecraft 1.17+, TSI prefers LTW when Amethyst confirms OpenGL ES 3 and the bundled LTW library are available; otherwise it prefers compatible GL4ES/Krypton and then MobileGlues. The original per-profile **Renderer** selector in Amethyst Profile Editor is retained, so users can manually choose any renderer that Amethyst reports as compatible. Existing valid manual selections are never overridden.
+
 This reduces avoidable launcher/native overhead and GPU work, but it cannot guarantee a specific FPS. Minecraft version, renderer, GPU driver, thermal throttling, mods and world complexity remain major factors. The Android launcher UI remains Java because it uses Android lifecycle and Amethyst APIs; replacing that glue with Rust/C++ would not itself accelerate Minecraft's renderer.
 
 ## Storage layout
