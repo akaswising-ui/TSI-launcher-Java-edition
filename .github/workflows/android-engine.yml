@@ -60,13 +60,28 @@ jobs:
             "build-tools;36.1.0" \
             "ndk;27.3.13750724"
 
+      - name: Set up Rust toolchain for Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi
+
+      - name: Test and build TSI Rust core for Android
+        working-directory: native/tsi-core
+        env:
+          ANDROID_NDK_HOME: ${{ github.workspace }}/${{ env.ANDROID_HOME }}/ndk/27.3.13750724
+        shell: bash
+        run: |
+          cargo install cargo-ndk --locked
+          cargo test
+          cargo ndk -t arm64-v8a -t armeabi-v7a -o ../../native-output build --release
+
       - name: Set up Gradle 9.6.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.6.1"
           validate-wrappers: false
 
-      - name: Integrate Java-only TSI launcher with Amethyst engine
+      - name: Integrate Rust and C++ TSI launcher core with Amethyst engine
         run: bash scripts/integrate-amethyst-engine.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
       - name: Generate Amethyst language list
@@ -105,7 +120,10 @@ jobs:
               if missing_assets:
                   raise SystemExit("Amethyst LWJGL/control assets missing from APK: " + ", ".join(missing_assets))
 
-              required_native = {"libpojavexec.so", "libpojavexec_awt.so", "libexithook.so"}
+              required_native = {
+                  "libpojavexec.so", "libpojavexec_awt.so", "libexithook.so",
+                  "libtsi_core.so", "libtsi_jni.so"
+              }
               natives_by_abi = {}
               for name in apk_entries:
                   parts = name.split("/")
