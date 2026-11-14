@@ -377,7 +377,7 @@ public final class JavaGameInstaller {
 
     }
 
-    private boolean isVerifiedFile(File file, String sha1, long expectedSize) {
+    private boolean isVerifiedFile(File file, String sha1, long expectedSize) throws IOException {
 
         return NativeBridge.isVerifiedFile(file, sha1, expectedSize);
 
