@@ -387,7 +387,7 @@ public final class AmethystEngineBridge {
                 ? new File(minecraftRoot.getParentFile() == null ? minecraftRoot : minecraftRoot.getParentFile(), "shared_dir")
                 : new File(selectedInstanceRoot, "game");
         ensureDirectory(gameDirectory);
-        ensureVivoFriendlyOptions(context, gameDirectory);
+        applyPerformanceProfile(context, safeInstanceId, false);
 
         String safePlayer = sanitizePlayerName(playerName);
         String safeRenderer = optionalIdentifier(rendererId, "renderer identifier", 80);
@@ -434,25 +434,52 @@ public final class AmethystEngineBridge {
         context.startActivity(intent);
     }
 
-    private static void ensureVivoFriendlyOptions(Context context, File gameDirectory) throws IOException {
-        File optionsFile = new File(gameDirectory, "options.txt");
-        if (optionsFile.isFile() && optionsFile.length() > 0L) return;
+    /**
+     * Applies a device-aware FPS preset once per game instance. The manual action
+     * can force a re-apply; normal launches never keep overwriting player changes.
+     */
+    public static String applyPerformanceProfile(Context context, String instanceId,
+                                                  boolean force) throws IOException {
+        String safeInstanceId = instanceId == null ? "" : instanceId.trim();
+        if (!safeInstanceId.matches("[A-Za-z0-9._+\\-]{1,100}")) {
+            throw new IllegalArgumentException("Invalid game instance identifier for FPS tuning.");
+        }
+
         DevicePerformanceProfileSnapshot device = DevicePerformanceProfile.detect(context);
-        StringBuilder defaults = new StringBuilder();
-        defaults.append("renderDistance:").append(device.getRenderDistance()).append('\n');
-        defaults.append("simulationDistance:").append(device.getSimulationDistance()).append('\n');
-        defaults.append("graphics:fast\n")
-                .append("fancyGraphics:false\n")
-                .append("ao:0.0\n")
-                .append("entityDistanceScaling:0.5\n")
-                .append("particles:1\n")
-                .append("maxFps:").append(device.getMaxFps()).append('\n')
-                .append("mipmapLevels:").append(device.getMipmapLevels()).append('\n')
-                .append("biomeBlendRadius:0\n")
-                .append("renderClouds:fast\n")
-                .append("entityShadows:false\n")
-                .append("useVbo:true\n");
-        writeAtomically(optionsFile, defaults.toString());
+        android.content.SharedPreferences preferences =
+                context.getSharedPreferences("tsi_launcher_preferences", Context.MODE_PRIVATE);
+        String preferenceKey = "fps_profile_" + safeInstanceId;
+        String profileSignature = "fps-v1|" + DevicePerformanceProfile.profileKey(context);
+        if (!force && profileSignature.equals(preferences.getString(preferenceKey, ""))) {
+            return "FPS profile is already current for this device (" + device.getTierLabel() + ").";
+        }
+
+        File minecraftRoot = AmethystStoragePaths.minecraftHome(context).getCanonicalFile();
+        File instancesRoot = new File(minecraftRoot, "instances").getCanonicalFile();
+        File instanceRoot = new File(instancesRoot, safeInstanceId).getCanonicalFile();
+        if (!instanceRoot.getPath().startsWith(instancesRoot.getPath() + File.separator)) {
+            throw new IOException("Selected Minecraft instance points outside the instances folder.");
+        }
+
+        File gameDirectory = new File(instanceRoot, "game").getCanonicalFile();
+        if (!gameDirectory.getPath().startsWith(instanceRoot.getPath() + File.separator)) {
+            throw new IOException("Selected Minecraft game folder points outside its instance.");
+        }
+        ensureDirectory(gameDirectory);
+
+        File optionsFile = new File(gameDirectory, "options.txt");
+        String existingOptions = optionsFile.isFile() ? readText(optionsFile) : "";
+        String optimizedOptions = MinecraftPerformanceOptions.merge(existingOptions, device);
+        writeAtomically(optionsFile, optimizedOptions);
+
+        if (!preferences.edit().putString(preferenceKey, profileSignature).commit()) {
+            throw new IOException("Could not save the applied FPS profile.");
+        }
+
+        return "FPS profile applied: " + device.getTierLabel()
+                + " • render distance " + device.getRenderDistance()
+                + " • simulation distance " + device.getSimulationDistance()
+                + " • FPS cap " + device.getMaxFps() + ".";
     }
 
     private static void ensureDefaultControlMap(Context context) throws IOException {
