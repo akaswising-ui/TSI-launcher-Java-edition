@@ -68,6 +68,7 @@ public final class VirtualMachineControllerActivity extends Activity {
         heapMb = preferences.getInt("ram_mb", com.tsi.launcher.runtime.DevicePerformanceProfile.recommendedHeapMb(this));
         try {
             instanceConfig = new GameInstanceRepository(getApplicationContext()).get(instanceId);
+            if (instanceConfig != null) versionId = instanceConfig.getVersionId();
         } catch (Exception ignored) {
             instanceConfig = null;
         }
