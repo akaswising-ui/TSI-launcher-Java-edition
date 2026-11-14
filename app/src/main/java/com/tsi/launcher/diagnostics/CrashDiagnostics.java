@@ -148,7 +148,10 @@ public final class CrashDiagnostics {
         JSONObject payload = new JSONObject().put("contents", new JSONArray().put(content));
         try {
             byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
-            try (java.io.OutputStream output = connection.getOutputStream()) {\n                output.write(body);\n                output.flush();\n            }
+            try (java.io.OutputStream output = connection.getOutputStream()) {
+                output.write(body);
+                output.flush();
+            }
             int status = connection.getResponseCode();
             java.io.InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream() : connection.getErrorStream();
