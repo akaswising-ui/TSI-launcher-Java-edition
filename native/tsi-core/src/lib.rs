@@ -700,6 +700,7 @@ pub unsafe extern "C" fn tsi_copy_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use tempfile::tempdir;
     use zip::write::FileOptions;
 
