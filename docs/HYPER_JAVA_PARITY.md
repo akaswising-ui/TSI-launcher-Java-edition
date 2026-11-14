@@ -20,7 +20,7 @@ Reference inspected: [Hyper Launcher 3 README](https://github.com/ashmeet-op/Hyp
 | Per-instance options | Runtime, renderer, JVM args, control-layout name, args mode and shared-data selection; settings are now passed into the Amethyst launch profile | Implemented; the selected runtime/control layout must exist on the device |
 | Custom Java runtime selection | Scan and select installed Android runtimes; verified Java 8/17/21/25 packages and automatic Java-major compatibility selection | Supported for compatible installed/package runtimes; Hyper-private runtime paths are not imported |
 | Accounts | Original Amethyst account selector, Microsoft OAuth and local/offline profiles | Supported through the embedded engine |
-| Renderer selection | Existing renderer picker, compatibility validation, adaptive default selection, LTW preference where available, GL4ES/MobileGlues and other Amethyst renderer options | Supported for Amethyst renderer IDs; Hyper-only APK renderer plugins are not portable |
+| Renderer selection | Existing renderer picker, compatibility validation, adaptive default selection, LTW preference where available, GL4ES/MobileGlues and other Amethyst renderer options | Built-in Amethyst renderers plus installed legacy FCL/Zalith V1 renderer APK discovery and launch bridge; Hyper Renderer V2 packages are not yet supported |
 | Performance tuning | Device-aware FPS options and manual re-apply action | Implemented; no device benchmark is implied |
 | MobileGlues | Existing Amethyst MobileGlues renderer support when its native component is present | Supported on compatible devices/builds |
 | Controller / touch / keyboard / mouse | Existing Amethyst controls and input implementation | Retained from the embedded engine |
@@ -44,21 +44,27 @@ Reference inspected: [Hyper Launcher 3 README](https://github.com/ashmeet-op/Hyp
 - LiteLoader: absent from the pinned Amethyst installer flow inspected for this integration.
 - Arbitrary Hyper-private runtime/control file paths: not portable across Android app-private storage.
 
-## Additional Hyper source-tree tools outside its README feature list
+## Additional Hyper source-tree tools and TSI implementation
 
-The Hyper source tree also contains tools that are not part of the published README feature summary. They are not represented as completed TSI features in this branch:
+The following tools have now been added to the TSI branch. They are TSI implementations that respect Android permissions and Amethyst's available native hooks; they are not byte-for-byte copies of Hyper's UI or backend.
 
-| Source-tree tool | Current TSI status |
-|---|---|
-| Game-surface screen recorder and recordings gallery | Not implemented in the TSI dashboard |
-| Vulkan / Adreno driver package manager | Not implemented as a Hyper-compatible package manager; TSI exposes only renderers supported by the pinned Amethyst engine |
-| External renderer APK plugin manager | Not compatible with Hyper plugin packages; only Amethyst-supported built-in renderers are selectable |
-| Built-in file-manager UI | No Hyper-style in-launcher file browser; TSI uses Android document pickers and the embedded engine's file-selection facilities |
-| Custom launcher themes / Hyper Material UI | Not cloned; TSI keeps its existing app identity and dashboard |
-| Per-instance custom image icon | Hyper icon metadata is not imported into the TSI instance card model |
-| Quick-settings game overlay and recording controls | Not cloned into TSI's existing interface |
-| Gemini crash-analysis helper | Not implemented; it is an optional service-specific tool, not a Minecraft runtime requirement |
+| Source-tree tool | TSI implementation | Compatibility boundary |
+|---|---|---|
+| Game screen recorder and recordings gallery | Android MediaProjection foreground service, user confirmation for every session, H.264 MP4 gallery with open/share/delete | Records the visible screen, video only, up to 720p/30 FPS. It does not record internal game audio or microphone audio |
+| Vulkan / Adreno driver manager | AdrenoTools-style ZIP import, bounded extraction, metadata and ELF ABI validation, select/remove, custom Turnip library path through Amethyst's existing namespace hook | Custom driver is used only on Adreno devices with Vulkan support. Hyper's `qgl_config.txt` override is not available in the pinned Amethyst engine |
+| External renderer APK plugins | Discovers installed legacy FCL/Zalith V1 APKs using `fclPlugin` / `zalithRendererPlugin` metadata, checks active-ABI `.so` libraries and DLOPEN dependencies, adds validated renderers to Amethyst | Requires the plugin APK already installed. Hyper Renderer V2 JSON plugins are not supported yet. `QUERY_ALL_PACKAGES` is required for package discovery and may need store-policy approval |
+| File manager | Android SAF folder picker with browse, create folder, open, copy/paste file, rename, share and delete | Operates only inside the folder tree explicitly granted by the user. It is not unrestricted root or full-storage access |
+| Custom instance images | Pick a local image, preview it on the instance card, reset to default | Stored in TSI app-private data by instance ID; not included in exported instance ZIPs |
+| Quick-settings / game overlay | User-enabled floating TSI shortcut bubble with recorder, gallery, file manager, crash analyzer, Vulkan packages and engine settings | This is a shortcut panel, not a clone of Hyper's full side-drawer quick controls. Android Display over other apps and foreground-service notices apply |
+| Gemini crash analyzer | Local log heuristics plus optional Gemini API analysis, encrypted API key in Android Keystore-backed storage, explicit checkbox consent before upload | The user must supply a Gemini API key and approve sending the displayed diagnostics. No automatic log upload |
+| LiteLoader | Not implemented | LiteLoader is not included in the pinned Amethyst installer flow. Hyper's README labels it experimental, but the inspected source did not provide a compatible installer flow to port safely |
 
-These omissions matter: a feature is not implemented merely because a button or placeholder can be drawn. Adding them properly would require separate Android permission flows, storage models, driver/plugin compatibility and, for some items, engine-level integration.
+## Remaining compatibility boundaries
 
-A successful CI build verifies compilation, packaging and repository-level tests. It does not replace installing the resulting APK and testing game launch, mod loading, rendering, input and crashes on a physical Android device.
+- Hyper's Material 3 launcher interface and app icon are not cloned. TSI keeps its existing icon and dashboard.
+- Hyper's private MojoExec backend and Horizon/Rust engine are separate game runtimes. TSI Java Edition continues to use the pinned Amethyst Java engine.
+- Hyper Renderer V2 plugin packages and its custom Vulkan `qgl_config` override are not implemented. The legacy FCL/Zalith plugin metadata and Turnip driver loader paths described above are supported only where the pinned Amethyst native runtime can consume them.
+- Hyper-private JRE and control-map file paths are not copied. TSI uses its own installed Android JREs and control maps.
+- LiteLoader remains unavailable until a compatible installer and profile integration are added.
+
+The engine-integrated build must pass before an APK is published. CI verifies compilation and packaging, not physical-phone recording, native driver loading, renderer stability, Gemini API behavior or Minecraft gameplay. A device smoke test is still required for those behaviors.
