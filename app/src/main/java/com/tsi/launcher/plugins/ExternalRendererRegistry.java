@@ -24,6 +24,7 @@ public final class ExternalRendererRegistry {
     private static final String TAG = "TSI-RendererPlugins";
     private static final String ID_PREFIX = "tsi.fcl.";
     private static final Map<String, RendererPluginInfo> CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, RendererPluginInfo> PREPARED = new ConcurrentHashMap<>();
 
     private ExternalRendererRegistry() { }
 
@@ -71,9 +72,25 @@ public final class ExternalRendererRegistry {
             }
             dlopen.add(extra.getAbsolutePath());
         }
-        return new RendererPluginInfo(info.packageName, info.rendererId, info.displayName,
+        RendererPluginInfo prepared = new RendererPluginInfo(info.packageName, info.rendererId, info.displayName,
                 info.minMinecraftVersion, info.maxMinecraftVersion, info.glLibraryName,
                 info.eglLibraryName, nativeRoot.getAbsolutePath(), info.environment, dlopen);
+        PREPARED.put(rendererId, prepared);
+        return prepared;
+    }
+
+    public static String getPreparedGraphicsLibrary(String rendererId) {
+        RendererPluginInfo prepared = PREPARED.get(rendererId);
+        return prepared == null ? null : prepared.getGraphicsLibraryAbsolutePath();
+    }
+
+    public static void invalidateEngineRendererCache() {
+        try {
+            Class<?> tools = Class.forName("net.kdt.pojavlaunch.Tools");
+            tools.getMethod("releaseRenderersCache").invoke(null);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not invalidate Amethyst's renderer cache", error);
+        }
     }
 
     public static void loadDependencies(RendererPluginInfo plugin) {
