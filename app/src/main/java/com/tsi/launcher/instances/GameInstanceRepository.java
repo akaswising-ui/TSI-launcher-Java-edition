@@ -414,6 +414,17 @@ public final class GameInstanceRepository {
                 }
 
                 LoaderComponent loader = loaderFromHyperVersionId(versionId, baseMinecraftVersion);
+                if (loader != null) {
+                    File stagedVersionJson = new File(
+                            new File(new File(stagedMinecraft, "versions"), versionId), versionId + ".json");
+                    File installedVersionJson = new File(
+                            new File(new File(minecraftRoot, "versions"), versionId), versionId + ".json");
+                    if (!stagedVersionJson.isFile() && !installedVersionJson.isFile()) {
+                        throw new IOException(
+                                "This Hyper modded instance ZIP does not include its loader version JSON. " +
+                                "Export it from Hyper as a MultiMC/Prism-compatible ZIP so TSI can restore the loader.");
+                    }
+                }
                 String rendererId = normalizeHyperRenderer(metadata.optString("renderer"));
                 String javaArgs = nonBlank(metadata.optString("jvmArgs"));
                 if (javaArgs != null && (javaArgs.length() > 8192 || javaArgs.indexOf('\u0000') >= 0)) {
