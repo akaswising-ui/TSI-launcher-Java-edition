@@ -14,6 +14,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import com.tsi.launcher.instances.GameInstance;
+import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.runtime.AmethystEngineBridge;
 import com.tsi.launcher.runtime.AndroidJreInstaller;
 import com.tsi.launcher.runtime.DetectedJavaRuntime;
@@ -35,6 +37,7 @@ public final class VirtualMachineControllerActivity extends Activity {
     private JavaRuntimeManager manager;
     private AndroidJreInstaller jreInstaller;
     private VersionVmInspection inspection;
+    private GameInstance instanceConfig;
     private String versionId;
     private String instanceId;
     private String playerName;
@@ -63,7 +66,14 @@ public final class VirtualMachineControllerActivity extends Activity {
         if (playerName == null) playerName = "Steve";
         SharedPreferences preferences = getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE);
         heapMb = preferences.getInt("ram_mb", com.tsi.launcher.runtime.DevicePerformanceProfile.recommendedHeapMb(this));
-        runtimePreference = preferences.getString("java_runtime", "Auto");
+        try {
+            instanceConfig = new GameInstanceRepository(getApplicationContext()).get(instanceId);
+        } catch (Exception ignored) {
+            instanceConfig = null;
+        }
+        runtimePreference = normalizeRuntimePreference(
+                instanceConfig == null ? null : instanceConfig.getSelectedRuntime(),
+                preferences.getString("java_runtime", "Auto"));
         buildUi();
         refreshInspection();
     }
@@ -239,8 +249,49 @@ public final class VirtualMachineControllerActivity extends Activity {
         else runtimePreference = "Name:" + runtimes.get(Math.min(selected - 1, runtimes.size() - 1)).getName();
         getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE).edit()
                 .putString("java_runtime", runtimePreference).apply();
-        setStatus("Runtime preference saved.");
-        refreshInspection();
+
+        if (instanceConfig == null) {
+            setStatus("Default runtime preference saved.");
+            refreshInspection();
+            return;
+        }
+        if (busy) {
+            setStatus("Wait for the current operation to finish before saving the runtime.");
+            return;
+        }
+        busy = true;
+        setStatus("Saving runtime selection for this instance…");
+        final String savedRuntime = "Auto".equals(runtimePreference) ? null : runtimePreference;
+        io.execute(() -> {
+            try {
+                GameInstanceRepository repository = new GameInstanceRepository(getApplicationContext());
+                instanceConfig = repository.updateLaunchSettings(instanceId,
+                        instanceConfig.getRendererId(), instanceConfig.getJavaArgs(),
+                        savedRuntime, instanceConfig.getControlLayout(), instanceConfig.getArgsMode(),
+                        instanceConfig.isSharedData());
+                main.post(() -> {
+                    busy = false;
+                    setStatus("Runtime preference saved for " + instanceConfig.getName() + ".");
+                    refreshInspection();
+                });
+            } catch (Exception error) {
+                main.post(() -> {
+                    busy = false;
+                    setStatus("Could not save instance runtime: " + message(error));
+                });
+            }
+        });
+    }
+
+    private static String normalizeRuntimePreference(String value, String fallback) {
+        String saved = value == null ? "" : value.trim();
+        if (saved.isEmpty()) return fallback == null ? "Auto" : fallback;
+        if ("Auto".equalsIgnoreCase(saved)) return "Auto";
+        if (saved.startsWith("Name:")) return saved;
+        if (saved.matches("(?i)Java\\s*[0-9]{1,2}") || saved.matches("[0-9]{1,2}")) {
+            return saved.replaceAll("(?i)^Java\\s*", "Java");
+        }
+        return "Name:" + saved;
     }
 
     private void installRuntime() {
@@ -325,7 +376,12 @@ public final class VirtualMachineControllerActivity extends Activity {
                 main.post(() -> {
                     try {
                         AmethystEngineBridge.launch(this, versionId, heapMb, runtime, playerName,
-                                instanceId, null, null, null, 0, false);
+                                instanceId,
+                                instanceConfig == null ? null : instanceConfig.getRendererId(),
+                                instanceConfig == null ? null : instanceConfig.getJavaArgs(),
+                                instanceConfig == null ? null : instanceConfig.getControlLayout(),
+                                instanceConfig == null ? 0 : instanceConfig.getArgsMode(),
+                                instanceConfig != null && instanceConfig.isSharedData());
                         setStatus("Starting Minecraft " + versionId + "…");
                     } catch (Exception error) {
                         busy = false;
