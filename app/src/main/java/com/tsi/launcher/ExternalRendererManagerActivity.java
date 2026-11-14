@@ -72,7 +72,8 @@ public final class ExternalRendererManagerActivity extends Activity {
             lp.bottomMargin = dp(8);
             list.addView(card, lp);
             card.addView(text(name, 15, 0xFF183B4A, true), matchWrap());
-            card.addView(text(id + "\n" + id.substring("tsi.fcl.".length()),
+            card.addView(text("Plugin key: " + id + "\n"
+                            + ExternalRendererRegistry.getRendererCompatibilitySummary(this, id),
                     10, 0xFF536D78, false), matchWrap());
             Button use = button("USE THIS RENDERER");
             use.setOnClickListener(v -> selectRenderer(id, name));
