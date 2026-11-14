@@ -5,6 +5,7 @@ import android.os.Build;
 import com.tsi.launcher.instances.GameInstance;
 import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.runtime.DevicePerformanceProfile;
+import com.tsi.launcher.runtime.DevicePerformanceProfileSnapshot;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -58,7 +59,7 @@ public final class CrashDiagnostics {
         data.append("Model: ").append(Build.MODEL).append('\n');
         data.append("Android: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
         data.append("Supported ABI: ").append(Build.SUPPORTED_ABIS.length == 0 ? "unknown" : Build.SUPPORTED_ABIS[0]).append('\n');
-        DevicePerformanceProfile profile = DevicePerformanceProfile.detect(context);
+        DevicePerformanceProfileSnapshot profile = DevicePerformanceProfile.detect(context);
         data.append("Physical RAM MB: ").append(profile.getTotalPhysicalRamMb()).append('\n');
         data.append("Performance tier: ").append(profile.getTierLabel()).append('\n');
         data.append("\nSELECTED INSTANCE\n");
@@ -147,7 +148,7 @@ public final class CrashDiagnostics {
         JSONObject payload = new JSONObject().put("contents", new JSONArray().put(content));
         try {
             byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
-            connection.getOutputStream().write(body);
+            try (java.io.OutputStream output = connection.getOutputStream()) {\n                output.write(body);\n                output.flush();\n            }
             int status = connection.getResponseCode();
             java.io.InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream() : connection.getErrorStream();
