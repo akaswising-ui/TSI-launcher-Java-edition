@@ -1302,9 +1302,9 @@ PY
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
-# Package the compiled Rust core for both supported Android ARM ABIs.
+# Package the compiled Rust core for every ABI enabled by Amethyst.
 TSI_NATIVE_OUTPUT="$TSI_ROOT/native-output"
-for abi in arm64-v8a armeabi-v7a; do
+for abi in arm64-v8a armeabi-v7a x86 x86_64; do
     test -s "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so"
     mkdir -p "$APP_ROOT/src/main/prebuilt/$abi"
     cp "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so" "$APP_ROOT/src/main/prebuilt/$abi/libtsi_core.so"
