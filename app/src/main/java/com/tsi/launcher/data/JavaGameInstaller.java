@@ -359,15 +359,8 @@ public final class JavaGameInstaller {
     }
 
     private String downloadText(String rawUrl) throws Exception {
-        HttpURLConnection connection = openConnection(rawUrl);
-        try {
-            int code = connection.getResponseCode();
-            if (code < 200 || code > 299) throw new IOException("Metadata request failed: HTTP " + code);
-            validateUrl(connection.getURL().toURI().toString());
-            return readStream(connection.getInputStream());
-        } finally {
-            connection.disconnect();
-        }
+        File scratch = File.createTempFile("tsi-minecraft-metadata-", ".json", context.getCacheDir());
+        return NativeBridge.downloadText(rawUrl, scratch);
     }
 
     private void downloadVerified(String rawUrl, File target,
