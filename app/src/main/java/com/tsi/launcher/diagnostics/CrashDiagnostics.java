@@ -204,8 +204,8 @@ public final class CrashDiagnostics {
 
     private static String sanitize(String value) {
         if (value == null) return "";
-        return value.replaceAll("(?i)(access_token|refresh_token|client_token|authorization|bearer)\\s*[:=]?\\s*[^\\s,;]+",
-                "$1=[redacted]");
+        return value.replaceAll("(?i)(access_token|refresh_token|client_token|authorization)\\s*[:=]\\s*(?:bearer\\s+)?[^\\s,;]+|bearer\\s+[^\\s,;]+",
+                "[redacted]");
     }
 
     private static String limit(String value, int maxChars) {
