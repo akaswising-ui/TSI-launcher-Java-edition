@@ -75,6 +75,7 @@ public final class AdrenoDriverPackageManager {
             if (!mainLibrary.isFile() || mainLibrary.length() == 0L) {
                 throw new IOException("Driver package does not contain its declared native library: " + library);
             }
+            verifyActiveAbi(mainLibrary);
             String hash = UUID.nameUUIDFromBytes((name + "::" + author)
                     .getBytes(StandardCharsets.UTF_8)).toString();
             File destination = new File(packagesDirectory, hash);
@@ -180,6 +181,7 @@ public final class AdrenoDriverPackageManager {
             if (!hash.equals(directory.getName()) || minApi > Build.VERSION.SDK_INT) return null;
             File main = safeChild(directory, library);
             if (!main.isFile() || main.length() == 0L) return null;
+            verifyActiveAbi(main);
             File config = new File(directory, "qgl_config.txt");
             return new DriverPackage(hash, name, author, version, library,
                     minApi, directory, config.isFile());
@@ -233,6 +235,10 @@ public final class AdrenoDriverPackageManager {
         }
         String normalized = path;
         while (normalized.startsWith("./")) normalized = normalized.substring(2);
+        while (normalized.endsWith("/") && !normalized.isEmpty()) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (normalized.isEmpty()) throw new IOException("Driver archive contains an empty entry.");
         for (String segment : normalized.split("/")) {
             if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
                 throw new IOException("Driver archive contains a path traversal entry.");
@@ -249,6 +255,34 @@ public final class AdrenoDriverPackageManager {
             throw new IOException("Refusing to access a path outside the driver package folder.");
         }
         return child;
+    }
+
+    private static void verifyActiveAbi(File library) throws IOException {
+        byte[] header = new byte[20];
+        try (InputStream input = new FileInputStream(library)) {
+            int offset = 0;
+            while (offset < header.length) {
+                int count = input.read(header, offset, header.length - offset);
+                if (count < 0) throw new IOException("Driver library has a truncated ELF header.");
+                offset += count;
+            }
+        }
+        if ((header[0] & 0xff) != 0x7f || header[1] != 'E' ||
+                header[2] != 'L' || header[3] != 'F') {
+            throw new IOException("Declared Vulkan driver library is not an ELF shared object.");
+        }
+        String abi = Build.SUPPORTED_ABIS.length == 0 ? "" : Build.SUPPORTED_ABIS[0];
+        int expectedClass;
+        int expectedMachine;
+        if ("arm64-v8a".equals(abi)) { expectedClass = 2; expectedMachine = 183; }
+        else if ("armeabi-v7a".equals(abi) || "armeabi".equals(abi)) { expectedClass = 1; expectedMachine = 40; }
+        else if ("x86_64".equals(abi)) { expectedClass = 2; expectedMachine = 62; }
+        else if ("x86".equals(abi)) { expectedClass = 1; expectedMachine = 3; }
+        else throw new IOException("Unsupported Android ABI for custom Vulkan driver: " + abi);
+        int machine = (header[18] & 0xff) | ((header[19] & 0xff) << 8);
+        if ((header[4] & 0xff) != expectedClass || machine != expectedMachine) {
+            throw new IOException("Driver library ABI does not match this app process (" + abi + ").");
+        }
     }
 
     private static String safeLibraryName(String name) throws IOException {
