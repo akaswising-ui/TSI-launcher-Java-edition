@@ -1,7 +1,10 @@
 package com.tsi.launcher;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,6 +21,20 @@ public final class GameRecorderActivity extends Activity {
     private static final int REQUEST_CAPTURE = 8310;
     private TextView status;
     private Button recordButton;
+    private boolean receiverRegistered;
+    private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (!GameRecordingService.ACTION_STATE.equals(intent.getAction())) return;
+            boolean active = intent.getBooleanExtra("recording", false);
+            if (status != null) status.setText(active
+                    ? "Recording is active. Stop it here or from the persistent notification."
+                    : "Recording stopped or failed.");
+            if (recordButton != null) {
+                recordButton.setEnabled(true);
+                recordButton.setText(active ? "STOP RECORDING" : "START SCREEN RECORDING");
+            }
+        }
+    };
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -87,7 +104,28 @@ public final class GameRecorderActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(start);
         else startService(start);
         status.setText("Starting recorder…");
-        recordButton.setEnabled(false);
+        recordButton.setEnabled(true);
+        recordButton.setText("STOP RECORDING");
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        IntentFilter filter = new IntentFilter(GameRecordingService.ACTION_STATE);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(stateReceiver, filter);
+        }
+        receiverRegistered = true;
+        refreshState();
+    }
+
+    @Override protected void onStop() {
+        if (receiverRegistered) {
+            unregisterReceiver(stateReceiver);
+            receiverRegistered = false;
+        }
+        super.onStop();
     }
 
     @Override protected void onResume() {
