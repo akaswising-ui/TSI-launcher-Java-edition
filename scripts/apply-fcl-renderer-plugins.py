@@ -88,5 +88,16 @@ jre = replace_once(
                 break;""",
     "Amethyst external renderer graphics library",
 )
+jre = replace_once(
+    jre,
+    """            if (Os.getenv("POJAVEXEC_EGL") != null && !LOCAL_RENDERER.equals("opengles_system_gles"))
+                Os.setenv("SDL_EGL_LIBRARY", NATIVE_LIB_DIR+"/"+Os.getenv("POJAVEXEC_EGL"), true);""",
+    """            if (Os.getenv("POJAVEXEC_EGL") != null && !LOCAL_RENDERER.equals("opengles_system_gles")) {
+                File eglLibrary = new File(Os.getenv("POJAVEXEC_EGL"));
+                if (!eglLibrary.isAbsolute()) eglLibrary = new File(NATIVE_LIB_DIR, Os.getenv("POJAVEXEC_EGL"));
+                Os.setenv("SDL_EGL_LIBRARY", eglLibrary.getAbsolutePath(), true);
+            }""",
+    "Amethyst absolute external EGL library path",
+)
 jre_path.write_text(jre, encoding="utf-8")
 print("Installed FCL/Zalith renderer APK discovery and launch bridge.")
