@@ -44,6 +44,14 @@ The launcher reads Android's reported physical RAM and applies a conservative Ja
 
 The lower profile avoids assigning too much of a 2 GB phone's memory to the Java heap while Android, SDL, LWJGL, graphics and audio still need RAM. Heap size is not total game memory. Very recent Minecraft versions and large modpacks may still exceed what a low-memory phone can run.
 
+## FPS and low-end device optimization
+
+The engine integration keeps the APK debuggable, but passes `NDK_DEBUG=0` to Amethyst's `ndk-build` so its native C/C++ host libraries are compiled with release optimizations (`-O2`) while retaining debug symbols. This avoids shipping an unoptimized native debug build as the gameplay APK.
+
+On the first launch for each game instance, TSI applies a device-aware video preset to that instance's existing `options.txt`. It reduces render/simulation distance, switches graphics to Fast, minimizes particles, disables clouds and VSync, and applies a RAM-tier FPS ceiling. The manual **APPLY FPS OPTIMIZATION** action can reapply the preset later. Unrelated settings such as audio, key bindings and resource-pack selections are preserved. Once the automatic preset has been applied, later launches do not overwrite player changes unless the device profile changes.
+
+This reduces avoidable launcher/native overhead and GPU work, but it cannot guarantee a specific FPS. Minecraft version, renderer, GPU driver, thermal throttling, mods and world complexity remain major factors. The Android launcher UI remains Java because it uses Android lifecycle and Amethyst APIs; replacing that glue with Rust/C++ would not itself accelerate Minecraft's renderer.
+
 ## Storage layout
 
 Game data is stored in app-specific external storage when available:
