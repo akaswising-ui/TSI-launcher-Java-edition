@@ -328,16 +328,24 @@ public final class MainActivity extends Activity {
     }
 
     private void openVmController() {
+        GameInstance selectedInstance = null;
+        try {
+            selectedInstance = instanceRepository.selected();
+            if (selectedInstance != null) activeInstance = selectedInstance;
+        } catch (Exception error) {
+            setStatus("Could not read the selected game instance: " + message(error));
+            return;
+        }
         MinecraftVersion version = selectedVersion();
-        String versionId = version == null
-                ? preferences.getString("selected_version_id", "") : version.getId();
+        String versionId = selectedInstance != null ? selectedInstance.getVersionId()
+                : version == null ? preferences.getString("selected_version_id", "") : version.getId();
         if (versionId == null || versionId.trim().isEmpty()) {
             setStatus("Select and install a Minecraft version first.");
             return;
         }
         Intent intent = new Intent(this, VirtualMachineControllerActivity.class);
         intent.putExtra("version_id", versionId);
-        intent.putExtra("instance_id", activeInstance == null ? versionId : activeInstance.getId());
+        intent.putExtra("instance_id", selectedInstance == null ? versionId : selectedInstance.getId());
         intent.putExtra("player_name", profileName);
         startActivity(intent);
     }
