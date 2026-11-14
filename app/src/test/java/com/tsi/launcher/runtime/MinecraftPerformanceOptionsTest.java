@@ -29,7 +29,17 @@ public class MinecraftPerformanceOptionsTest {
         assertEquals(1, occurrences(merged, "renderDistance:"));
     }
 
-    @Test public void repeatedMergeDoesNotCreateDuplicateSettings() {
+    @Test public void preservesMultilineResourcePackValuesExactly() {
+        DevicePerformanceProfileSnapshot profile = DevicePerformanceProfile.profileFor(
+                6144, false, true, 8, "arm64-v8a");
+        String resourcePacks = "resourcePacks:[\n  \"vanilla\",\n  \"file/custom.zip\"\n]\n";
+        String existing = resourcePacks + "key_key.forward: W\n";
+        String merged = MinecraftPerformanceOptions.merge(existing, profile);
+
+        assertTrue(merged.startsWith(resourcePacks + "key_key.forward: W\n"));
+    }
+
+    @Test public void repeatedMergeDoesNotCreateDuplicatePerformanceSettings() {
         DevicePerformanceProfileSnapshot profile = DevicePerformanceProfile.profileFor(
                 6144, false, true, 8, "arm64-v8a");
         String once = MinecraftPerformanceOptions.merge("graphics:fancy\nmaxFps:260\n", profile);
