@@ -88,9 +88,19 @@ public final class ModPackManagerActivity extends Activity {
         importButton.setOnClickListener(v -> chooseImport());
         root.addView(importButton, matchWrap());
 
+        Button installedModsButton = button("MANAGE INSTALLED .JAR MODS");
+        installedModsButton.setOnClickListener(v ->
+                startActivity(new Intent(this, InstalledModManagerActivity.class)));
+        root.addView(installedModsButton, matchWrap());
+
         Button loadersButton = button("OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS");
         loadersButton.setOnClickListener(v -> openAmethyst("tsi_open_modloader_manager"));
         root.addView(loadersButton, matchWrap());
+
+        Button liteLoaderButton = button("INSTALL LITELOADER (LEGACY 1.8.9–1.12.2)");
+        liteLoaderButton.setOnClickListener(v ->
+                startActivity(new Intent(this, LiteLoaderInstallActivity.class)));
+        root.addView(liteLoaderButton, matchWrap());
 
         status = text("Connecting to modpack providers…", 12, 0xFF9FC18E, false);
         status.setPadding(0, dp(10), 0, dp(10));

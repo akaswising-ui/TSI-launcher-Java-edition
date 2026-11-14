@@ -3,11 +3,17 @@ package com.tsi.launcher;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -26,12 +32,14 @@ import java.util.concurrent.Executors;
 public final class GameInstanceManagerActivity extends Activity {
     private static final int REQUEST_IMPORT_ZIP = 5101;
     private static final int REQUEST_EXPORT_ZIP = 5102;
+    private static final int REQUEST_INSTANCE_ICON = 5103;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private GameInstanceRepository repository;
     private LinearLayout listContainer;
     private TextView status;
     private String selectedVersionId;
     private String pendingExportId;
+    private String pendingIconInstanceId;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -118,6 +126,18 @@ public final class GameInstanceManagerActivity extends Activity {
 
             String type = instance.getLoaderId() == null ? "" :
                     " • " + instance.getLoaderId().substring(instance.getLoaderId().lastIndexOf('.') + 1);
+            File iconFile = instanceIconFile(instance);
+            if (iconFile.isFile()) {
+                Bitmap icon = decodeInstanceIcon(iconFile, 96);
+                if (icon != null) {
+                    ImageView image = new ImageView(this);
+                    image.setImageBitmap(icon);
+                    image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(64), dp(64));
+                    iconParams.bottomMargin = dp(6);
+                    card.addView(image, iconParams);
+                }
+            }
             card.addView(text(instance.getName() + (instance.isPinned() ? "  ★" : ""),
                     16, 0xFF183B4A, true), matchWrap());
             card.addView(text("Minecraft " + instance.getVersionId() + type,
@@ -152,7 +172,166 @@ public final class GameInstanceManagerActivity extends Activity {
             row2.addView(export, new LinearLayout.LayoutParams(0, dp(44), 1f));
             row2.addView(delete, new LinearLayout.LayoutParams(0, dp(44), 1f));
             card.addView(row2, matchWrap());
+
+            Button iconButton = button("CHANGE INSTANCE ICON");
+            iconButton.setOnClickListener(v -> chooseInstanceIcon(instance));
+            card.addView(iconButton, matchWrap());
+
+            Button resetIcon = button("RESET INSTANCE ICON");
+            resetIcon.setOnClickListener(v -> resetInstanceIcon(instance));
+            card.addView(resetIcon, matchWrap());
+
+            Button configure = button("INSTANCE SETTINGS");
+            configure.setOnClickListener(v -> showSettingsDialog(instance));
+            card.addView(configure, matchWrap());
         }
+    }
+
+    private void chooseInstanceIcon(GameInstance instance) {
+        pendingIconInstanceId = instance.getId();
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_INSTANCE_ICON);
+    }
+
+    private void saveInstanceIcon(Uri uri, String instanceId) {
+        runOperation("Importing instance icon…", () -> {
+            GameInstance instance = repository.get(instanceId);
+            File destination = instanceIconFile(instance);
+            File temporary = new File(destination.getParentFile(), "instance-icon.tmp");
+            long total = 0L;
+            try (InputStream input = getContentResolver().openInputStream(uri);
+                 FileOutputStream output = new FileOutputStream(temporary)) {
+                if (input == null) throw new IOException("Android could not open the selected image.");
+                byte[] buffer = new byte[16 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    total += count;
+                    if (total > 8L * 1024L * 1024L) {
+                        throw new IOException("Instance icons are limited to 8 MB.");
+                    }
+                    output.write(buffer, 0, count);
+                }
+                output.getFD().sync();
+            } catch (Exception error) {
+                temporary.delete();
+                throw error;
+            }
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(temporary.getAbsolutePath(), bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                    bounds.outWidth > 12000 || bounds.outHeight > 12000) {
+                temporary.delete();
+                throw new IOException("The selected file is not a supported image or its dimensions are too large.");
+            }
+            if (destination.exists() && !destination.delete()) {
+                temporary.delete();
+                throw new IOException("Could not replace the previous instance icon.");
+            }
+            if (!temporary.renameTo(destination)) {
+                temporary.delete();
+                throw new IOException("Could not save the instance icon.");
+            }
+            return "Updated icon for " + instance.getName() + ".";
+        });
+    }
+
+    private void resetInstanceIcon(GameInstance instance) {
+        runOperation("Resetting instance icon…", () -> {
+            File icon = instanceIconFile(instance);
+            if (icon.exists() && !icon.delete()) throw new IOException("Could not remove the custom icon.");
+            return "Restored default icon for " + instance.getName() + ".";
+        });
+    }
+
+    private File instanceIconFile(GameInstance instance) {
+        File folder = new File(getFilesDir(), "instance-icons");
+        if (!folder.isDirectory()) folder.mkdirs();
+        return new File(folder, instance.getId() + ".img");
+    }
+
+    private Bitmap decodeInstanceIcon(File file, int requestedSize) {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        if (options.outWidth <= 0 || options.outHeight <= 0) return null;
+        int sample = 1;
+        while (options.outWidth / (sample * 2) >= requestedSize &&
+                options.outHeight / (sample * 2) >= requestedSize) sample *= 2;
+        options.inJustDecodeBounds = false;
+        options.inSampleSize = sample;
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        try { return BitmapFactory.decodeFile(file.getAbsolutePath(), options); }
+        catch (OutOfMemoryError ignored) { return null; }
+    }
+
+    private void showSettingsDialog(GameInstance instance) {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setPadding(dp(8), dp(4), dp(8), dp(4));
+        fields.setOrientation(LinearLayout.VERTICAL);
+
+        EditText renderer = new EditText(this);
+        renderer.setSingleLine(true);
+        renderer.setHint("Renderer ID (blank = automatic)");
+        renderer.setText(instance.getRendererId() == null ? "" : instance.getRendererId());
+        fields.addView(renderer, matchWrap());
+
+        EditText runtime = new EditText(this);
+        runtime.setSingleLine(true);
+        runtime.setHint("Runtime: Auto or installed runtime name");
+        String runtimeName = instance.getSelectedRuntime();
+        if (runtimeName != null && runtimeName.startsWith("Name:")) runtimeName = runtimeName.substring(5);
+        runtime.setText(runtimeName == null ? "Auto" : runtimeName);
+        fields.addView(runtime, matchWrap());
+
+        EditText javaArgs = new EditText(this);
+        javaArgs.setSingleLine(false);
+        javaArgs.setMinLines(2);
+        javaArgs.setMaxLines(4);
+        javaArgs.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        javaArgs.setHint("Custom JVM arguments (optional)");
+        javaArgs.setText(instance.getJavaArgs() == null ? "" : instance.getJavaArgs());
+        fields.addView(javaArgs, matchWrap());
+
+        EditText controls = new EditText(this);
+        controls.setSingleLine(true);
+        controls.setHint("Control layout name (blank = default)");
+        controls.setText(instance.getControlLayout() == null ? "" : instance.getControlLayout());
+        fields.addView(controls, matchWrap());
+
+        Spinner argsMode = new Spinner(this);
+        argsMode.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"Argument mode 0", "Argument mode 1", "Argument mode 2"}));
+        argsMode.setSelection(Math.max(0, Math.min(2, instance.getArgsMode())));
+        fields.addView(argsMode, matchWrap());
+
+        CheckBox sharedData = new CheckBox(this);
+        sharedData.setText("Use shared game data folder");
+        sharedData.setChecked(instance.isSharedData());
+        fields.addView(sharedData, matchWrap());
+
+        new AlertDialog.Builder(this)
+                .setTitle("Configure " + instance.getName())
+                .setMessage("Use only renderer IDs and runtime names installed on this device. Invalid choices can stop Minecraft from launching.")
+                .setView(fields)
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("SAVE", (dialog, which) -> runOperation("Saving instance settings…", () -> {
+                    String runtimeValue = runtime.getText().toString().trim();
+                    if ("Auto".equalsIgnoreCase(runtimeValue)) runtimeValue = null;
+                    repository.updateLaunchSettings(instance.getId(),
+                            renderer.getText().toString(),
+                            javaArgs.getText().toString(),
+                            runtimeValue,
+                            controls.getText().toString(),
+                            argsMode.getSelectedItemPosition(),
+                            sharedData.isChecked());
+                    return "Saved launch settings for " + instance.getName() + ".";
+                })).show();
     }
 
     private void showCreateDialog() {
@@ -212,7 +391,10 @@ public final class GameInstanceManagerActivity extends Activity {
     private void chooseImport() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/zip");
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "application/zip", "application/x-7z-compressed", "application/x-7z"
+        });
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivityForResult(intent, REQUEST_IMPORT_ZIP);
     }
@@ -234,7 +416,11 @@ public final class GameInstanceManagerActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
-        if (requestCode == REQUEST_IMPORT_ZIP) importArchive(uri);
+        if (requestCode == REQUEST_INSTANCE_ICON && pendingIconInstanceId != null) {
+            String id = pendingIconInstanceId;
+            pendingIconInstanceId = null;
+            saveInstanceIcon(uri, id);
+        } else if (requestCode == REQUEST_IMPORT_ZIP) importArchive(uri);
         else if (requestCode == REQUEST_EXPORT_ZIP && pendingExportId != null) {
             String id = pendingExportId;
             pendingExportId = null;
@@ -243,18 +429,18 @@ public final class GameInstanceManagerActivity extends Activity {
     }
 
     private void importArchive(Uri uri) {
-        runOperation("Importing MultiMC / Prism archive…", () -> {
-            File temporary = new File(getCacheDir(), "tsi-mmc-" + System.currentTimeMillis() + ".zip");
+        runOperation("Importing ZIP / 7z / MultiMC / Prism / Hyper archive…", () -> {
+            File temporary = new File(getCacheDir(), "tsi-instance-" + System.currentTimeMillis() + ".archive");
             try {
                 try (InputStream input = getContentResolver().openInputStream(uri);
                      FileOutputStream output = new FileOutputStream(temporary)) {
-                    if (input == null) throw new IOException("Android could not open the selected ZIP.");
+                    if (input == null) throw new IOException("Android could not open the selected archive.");
                     byte[] buffer = new byte[64 * 1024];
                     int count;
                     while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
                     output.getFD().sync();
                 }
-                GameInstance imported = repository.importMultiMc(temporary);
+                GameInstance imported = repository.importArchive(temporary);
                 return "Imported and selected " + imported.getName() + ".";
             } finally {
                 temporary.delete();

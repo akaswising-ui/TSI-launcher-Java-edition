@@ -1,0 +1,345 @@
+package com.tsi.launcher.plugins;
+
+import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.os.Build;
+import android.util.Log;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Legacy FCL / Zalith renderer APK discovery for the pinned Amethyst renderer bridge.
+ * Plugins must already be installed as separate Android apps. Only the active
+ * ABI's nativeLibraryDir is used; no code or library is extracted from arbitrary ZIPs.
+ */
+public final class ExternalRendererRegistry {
+    private static final String TAG = "TSI-RendererPlugins";
+    private static final String ID_PREFIX = "tsi.fcl.";
+    private static final Map<String, RendererPluginInfo> CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, RendererPluginInfo> PREPARED = new ConcurrentHashMap<>();
+
+    private ExternalRendererRegistry() { }
+
+    public static List<String> getRendererIds(Context context) {
+        refresh(context);
+        List<String> ids = new ArrayList<>(CACHE.keySet());
+        Collections.sort(ids);
+        return ids;
+    }
+
+    public static String getRendererDisplayName(Context context, String rendererId) {
+        RendererPluginInfo info = get(context, rendererId);
+        return info == null ? rendererId : info.displayName;
+    }
+
+    public static String getRendererCompatibilitySummary(Context context, String rendererId) {
+        RendererPluginInfo info = get(context, rendererId);
+        if (info == null) return "Plugin is no longer installed";
+        String range;
+        if ((info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty())
+                && (info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty())) {
+            range = "Minecraft range not declared";
+        } else {
+            String minimum = info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty()
+                    ? "any" : info.minMinecraftVersion;
+            String maximum = info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty()
+                    ? "any" : info.maxMinecraftVersion;
+            range = "Minecraft " + minimum + " to " + maximum;
+        }
+        return "Native renderer: " + info.nativeRendererId + " • " + range;
+    }
+
+    public static boolean isExternalRenderer(Context context, String rendererId) {
+        return rendererId != null && rendererId.startsWith(ID_PREFIX) && get(context, rendererId) != null;
+    }
+
+    public static RendererPluginInfo get(Context context, String rendererId) {
+        if (rendererId == null || !rendererId.startsWith(ID_PREFIX)) return null;
+        refresh(context);
+        return CACHE.get(rendererId);
+    }
+
+    public static RendererPluginInfo prepare(Context context, String rendererId) throws Exception {
+        return prepare(context, rendererId, null);
+    }
+
+    public static RendererPluginInfo prepare(Context context, String rendererId,
+                                              String minecraftVersion) throws Exception {
+        RendererPluginInfo info = get(context, rendererId);
+        if (info == null) throw new IllegalArgumentException("External renderer plugin is no longer installed or compatible.");
+        if (minecraftVersion != null && !supportsMinecraftVersion(info, minecraftVersion)) {
+            throw new IllegalArgumentException("Renderer " + info.displayName
+                    + " does not support Minecraft " + minecraftVersion + ".");
+        }
+        // Revalidate the package at the point of use. A removed or updated plugin
+        // must not leave a stale path in the native renderer launch.
+        ApplicationInfo current = getApplicationInfo(context, info.packageName);
+        if (current == null || current.nativeLibraryDir == null) {
+            throw new IllegalStateException("Renderer plugin app is unavailable.");
+        }
+        File nativeRoot = new File(current.nativeLibraryDir).getCanonicalFile();
+        File library = new File(nativeRoot, info.glLibraryName).getCanonicalFile();
+        if (!nativeRoot.equals(library.getParentFile()) || !library.isFile()) {
+            throw new IllegalStateException("Renderer native library is missing for the active Android ABI.");
+        }
+        List<String> dlopen = new ArrayList<>();
+        for (String name : info.dlopenLibraries) {
+            File extra = new File(nativeRoot, name).getCanonicalFile();
+            if (!nativeRoot.equals(extra.getParentFile()) || !extra.isFile()) {
+                throw new IllegalStateException("Renderer dependency is missing: " + name);
+            }
+            dlopen.add(extra.getAbsolutePath());
+        }
+        RendererPluginInfo prepared = new RendererPluginInfo(info.packageName, info.rendererId,
+                info.nativeRendererId, info.displayName, info.minMinecraftVersion,
+                info.maxMinecraftVersion, info.glLibraryName, info.eglLibraryName,
+                nativeRoot.getAbsolutePath(), info.environment, dlopen);
+        PREPARED.put(rendererId, prepared);
+        return prepared;
+    }
+
+    public static String getPreparedGraphicsLibrary(String rendererId) {
+        RendererPluginInfo prepared = PREPARED.get(rendererId);
+        return prepared == null ? null : prepared.getGraphicsLibraryAbsolutePath();
+    }
+
+    public static void invalidateEngineRendererCache() {
+        try {
+            Class<?> tools = Class.forName("net.kdt.pojavlaunch.Tools");
+            tools.getMethod("releaseRenderersCache").invoke(null);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not invalidate Amethyst's renderer cache", error);
+        }
+    }
+
+    public static void loadDependencies(RendererPluginInfo plugin) {
+        for (String library : plugin.dlopenLibraries) {
+            try {
+                System.load(library);
+            } catch (LinkageError error) {
+                throw new IllegalStateException("Could not load renderer dependency " +
+                        new File(library).getName() + ": " + error.getMessage(), error);
+            }
+        }
+    }
+
+    private static void refresh(Context context) {
+        CACHE.clear();
+        PackageManager manager = context.getPackageManager();
+        List<ApplicationInfo> applications;
+        try {
+            // QUERY_ALL_PACKAGES is declared because FCL renderer packages are
+            // arbitrary installed APKs. On restricted stores this permission
+            // needs policy approval; sideload builds can use it directly.
+            applications = manager.getInstalledApplications(PackageManager.GET_META_DATA);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Cannot enumerate installed renderer plugins", error);
+            return;
+        }
+
+        for (ApplicationInfo app : applications) {
+            if (app == null || app.packageName == null || app.nativeLibraryDir == null ||
+                    (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+            Bundle metadata = app.metaData;
+            if (metadata == null) continue;
+            if (!metadata.getBoolean("fclPlugin", false) &&
+                    !metadata.getBoolean("zalithRendererPlugin", false)) continue;
+            try {
+                RendererPluginInfo plugin = parse(context, app, metadata);
+                if (plugin != null) CACHE.put(plugin.rendererId, plugin);
+            } catch (Exception error) {
+                Log.w(TAG, "Skipped incompatible renderer APK " + app.packageName, error);
+            }
+        }
+    }
+
+    private static RendererPluginInfo parse(Context context, ApplicationInfo app, Bundle metadata) throws Exception {
+        String declaration = metadata.getString("renderer");
+        String display = metadata.getString("des");
+        String envDeclaration = metadata.getString("pojavEnv");
+        if (declaration == null || display == null || display.trim().isEmpty()) return null;
+        String[] renderer = declaration.split(":", -1);
+        if (renderer.length < 2 || renderer.length > 3) return null;
+
+        String nativeRendererId = renderer[0].trim();
+        if (!nativeRendererId.matches("[A-Za-z0-9._+.-]{1,120}")) {
+            throw new IllegalArgumentException("Invalid native renderer ID in plugin metadata.");
+        }
+        String glLibrary = safeLibraryName(new File(renderer[1]).getName());
+        String eglDeclared = renderer.length > 2 && !renderer[2].trim().isEmpty()
+                ? renderer[2].trim() : "libEGL.so";
+        String eglLibrary = safeLibraryName(new File(eglDeclared).getName());
+        File nativeRoot = new File(app.nativeLibraryDir).getCanonicalFile();
+        File mainLibrary = new File(nativeRoot, glLibrary).getCanonicalFile();
+        if (!nativeRoot.equals(mainLibrary.getParentFile()) || !mainLibrary.isFile()) return null;
+        File bundledEgl = new File(nativeRoot, eglLibrary).getCanonicalFile();
+        if (!nativeRoot.equals(bundledEgl.getParentFile()) || !bundledEgl.isFile()) {
+            eglLibrary = "libEGL.so";
+        } else {
+            eglLibrary = bundledEgl.getAbsolutePath();
+        }
+
+        String packageName = app.packageName;
+        if (!packageName.matches("[A-Za-z0-9_.]{1,68}")) return null;
+        String id = ID_PREFIX + packageName;
+        String min = readVersion(metadata, "minMCVer");
+        String max = readVersion(metadata, "maxMCVer");
+
+        Map<String, String> environment = new LinkedHashMap<>();
+        List<String> dlopen = new ArrayList<>();
+        if (envDeclaration != null) {
+            for (String item : envDeclaration.split(":")) {
+                int equals = item.indexOf('=');
+                if (equals <= 0) continue;
+                String key = item.substring(0, equals).trim();
+                String value = item.substring(equals + 1).trim();
+                if (!key.matches("[A-Za-z_][A-Za-z0-9_]{0,63}") ||
+                        value.length() > 1024 || value.contains("\n") || value.contains("\r")) continue;
+                if ("POJAV_RENDERER".equals(key)) {
+                    if (!value.matches("[A-Za-z0-9._+.-]{1,120}")) {
+                        throw new IllegalArgumentException("Invalid POJAV_RENDERER value in plugin metadata.");
+                    }
+                    nativeRendererId = value;
+                } else if ("DLOPEN".equals(key)) {
+                    for (String extra : value.split(",")) {
+                        String safe = safeLibraryName(extra.trim());
+                        if (!dlopen.contains(safe)) dlopen.add(safe);
+                    }
+                } else if ("LIB_MESA_NAME".equals(key) || "MESA_LIBRARY".equals(key) ||
+                        "POJAVEXEC_EGL".equals(key)) {
+                    String safe = safeLibraryName(new File(value).getName());
+                    File optionalLibrary = new File(nativeRoot, safe).getCanonicalFile();
+                    if (nativeRoot.equals(optionalLibrary.getParentFile()) && optionalLibrary.isFile()) {
+                        environment.put(key, optionalLibrary.getAbsolutePath());
+                    }
+                } else if (!"LD_LIBRARY_PATH".equals(key) && !"LD_PRELOAD".equals(key)
+                        && !"PATH".equals(key) && !"HOME".equals(key)) {
+                    environment.put(key, value);
+                }
+            }
+        }
+
+        // Hyper/FCL conventions permit the EGL library to be supplied either by
+        // the plugin package or by the system. Don't reject a system EGL name.
+        if (eglLibrary.startsWith("/")) {
+            environment.put("POJAVEXEC_EGL", eglLibrary);
+        }
+        return new RendererPluginInfo(packageName, id, nativeRendererId, display.trim(),
+                min, max, glLibrary, eglLibrary, nativeRoot.getAbsolutePath(),
+                environment, dlopen);
+    }
+
+    static boolean supportsMinecraftVersion(RendererPluginInfo info, String minecraftVersion) {
+        if (info == null) return false;
+        if ((info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty())
+                && (info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty())) {
+            return true;
+        }
+        String current = numericRelease(minecraftVersion);
+        if (current == null) return false;
+        if (info.minMinecraftVersion != null && !info.minMinecraftVersion.trim().isEmpty()) {
+            String minimum = numericRelease(info.minMinecraftVersion);
+            if (minimum == null || compareNumericVersions(current, minimum) < 0) return false;
+        }
+        if (info.maxMinecraftVersion != null && !info.maxMinecraftVersion.trim().isEmpty()) {
+            String maximum = numericRelease(info.maxMinecraftVersion);
+            if (maximum == null || compareNumericVersions(current, maximum) > 0) return false;
+        }
+        return true;
+    }
+
+    static int compareNumericVersions(String left, String right) {
+        String[] a = left.split("\\.");
+        String[] b = right.split("\\.");
+        int length = Math.max(a.length, b.length);
+        for (int i = 0; i < length; i++) {
+            int av = i < a.length ? Integer.parseInt(a[i]) : 0;
+            int bv = i < b.length ? Integer.parseInt(b[i]) : 0;
+            if (av != bv) return Integer.compare(av, bv);
+        }
+        return 0;
+    }
+
+    private static String numericRelease(String value) {
+        if (value == null) return null;
+        String release = value.trim().split("-", 2)[0];
+        return release.matches("[0-9]{1,3}(?:\\.[0-9]{1,3}){1,3}") ? release : null;
+    }
+
+    private static String safeLibraryName(String value) throws Exception {
+        if (value == null) throw new IllegalArgumentException("Renderer library name is missing.");
+        String name = value.trim();
+        if (!name.matches("[A-Za-z0-9_.+-]{1,120}\\.so") ||
+                name.equals(".so") || name.contains("..")) {
+            throw new IllegalArgumentException("Invalid renderer .so library name.");
+        }
+        return name;
+    }
+
+    private static String readVersion(Bundle metadata, String key) {
+        Object value = metadata.get(key);
+        if (value instanceof String) return (String) value;
+        if (value instanceof Number) return String.valueOf(value);
+        return null;
+    }
+
+    private static ApplicationInfo getApplicationInfo(Context context, String packageName) {
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                return context.getPackageManager().getApplicationInfo(packageName,
+                        PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA));
+            }
+            //noinspection deprecation
+            return context.getPackageManager().getApplicationInfo(packageName, PackageManager.GET_META_DATA);
+        } catch (PackageManager.NameNotFoundException error) {
+            return null;
+        }
+    }
+
+    public static final class RendererPluginInfo {
+        public final String packageName;
+        public final String rendererId;
+        public final String nativeRendererId;
+        public final String displayName;
+        public final String minMinecraftVersion;
+        public final String maxMinecraftVersion;
+        public final String glLibraryName;
+        public final String eglLibraryName;
+        public final String nativeLibraryDirectory;
+        public final Map<String, String> environment;
+        public final List<String> dlopenLibraries;
+
+        RendererPluginInfo(String packageName, String rendererId, String nativeRendererId,
+                           String displayName, String minMinecraftVersion, String maxMinecraftVersion,
+                           String glLibraryName, String eglLibraryName, String nativeLibraryDirectory,
+                           Map<String, String> environment, List<String> dlopenLibraries) {
+            this.packageName = packageName;
+            this.rendererId = rendererId;
+            this.nativeRendererId = nativeRendererId;
+            this.displayName = displayName;
+            this.minMinecraftVersion = minMinecraftVersion;
+            this.maxMinecraftVersion = maxMinecraftVersion;
+            this.glLibraryName = glLibraryName;
+            this.eglLibraryName = eglLibraryName;
+            this.nativeLibraryDirectory = nativeLibraryDirectory;
+            this.environment = Collections.unmodifiableMap(new LinkedHashMap<>(environment));
+            this.dlopenLibraries = Collections.unmodifiableList(new ArrayList<>(dlopenLibraries));
+        }
+
+        public String getGraphicsLibraryAbsolutePath() {
+            return new File(nativeLibraryDirectory, glLibraryName).getAbsolutePath();
+        }
+
+        public String getLibraryPath() {
+            return nativeLibraryDirectory;
+        }
+    }
+}

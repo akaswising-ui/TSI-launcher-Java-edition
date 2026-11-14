@@ -67,9 +67,9 @@ public final class DevicePerformanceProfile {
 
         Tuning defaults;
         if (lowMemory) {
-            defaults = new Tuning("Low-memory", 296, 384, 512, 2, 4, 3, 30, 0);
+            defaults = new Tuning("Low-memory", 296, 384, 512, 2, 4, 3, 60, 0);
         } else if (ram < 3584) {
-            defaults = new Tuning("Entry", 384, 512, 768, 2, 5, 4, 45, 0);
+            defaults = new Tuning("Entry", 384, 512, 768, 2, 5, 4, 60, 0);
         } else if (ram < 4608) {
             defaults = new Tuning("Balanced", 512, 768, 1024, 3, 6, 4, 60, 1);
         } else if (ram < 6656) {

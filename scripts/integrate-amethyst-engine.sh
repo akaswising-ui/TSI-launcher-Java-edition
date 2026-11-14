@@ -103,9 +103,17 @@ java_dependencies = (
     dependency_marker + "\n\n"
     "    // Amethyst's ExagearApacheCommons.jar already provides Commons Compress and Commons IO.\n"
     "    // Do not add a second copy of those packages to the engine APK.\n"
-    '    implementation "org.tukaani:xz:1.10"'
+    '    implementation "org.tukaani:xz:1.10"' + "\n" +
+    '    implementation "androidx.documentfile:documentfile:1.0.1"'
 )
 text = replace_once(text, dependency_marker, java_dependencies, "TSI Java dependency insertion")
+text = replace_once(
+    text,
+    '                arguments "APP_SHORT_COMMANDS=true"',
+    '                // Keep the debug APK debuggable but compile native engine libraries with -O2.\n'
+    '                arguments "APP_SHORT_COMMANDS=true", "NDK_DEBUG=0"',
+    "optimized Amethyst native build",
+)
 app_gradle.write_text(text)
 
 # Initialize the default SharedPreferences before Amethyst reads JVM/profile settings.
@@ -309,7 +317,12 @@ manifest = replace_once(
     manifest,
     '    <uses-permission android:name="android.permission.INTERNET" />',
     '    <uses-permission android:name="android.permission.INTERNET" />\n'
-    '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />',
+    '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n'
+    '    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n'
+    '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />',
     "optional all-files access permission",
 )
 # Keep Amethyst's original TestStorageActivity as the Android app entry point.
@@ -323,6 +336,21 @@ launcher_activity = (
     '        <activity android:name="com.tsi.launcher.VirtualMachineControllerActivity" android:exported="false" />\n'
     '        <activity android:name="com.tsi.launcher.GameInstanceManagerActivity" android:exported="false" />\n'
     '        <activity android:name="com.tsi.launcher.ModPackManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.InstalledModManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.GameRecorderActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.GameRecordingsGalleryActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.StorageFileManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.CrashAnalyzerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.ExternalRendererManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.VulkanDriverManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.LiteLoaderInstallActivity" android:exported="false" />\n'
+    '        <service android:name="com.tsi.launcher.recording.GameRecordingService" android:exported="false" android:foregroundServiceType="mediaProjection" />\n'
+    '        <service android:name="com.tsi.launcher.GameQuickToolsService" android:exported="false" android:foregroundServiceType="specialUse">\n'
+    '            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled floating game quick tools overlay" />\n'
+    '        </service>\n'
+    '        <provider android:name="androidx.core.content.FileProvider" android:authorities="com.tsi.launcher.files" android:exported="false" android:grantUriPermissions="true">\n'
+    '            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/tsi_file_paths" />\n'
+    '        </provider>\n'
 )
 marker = '        <activity\n            android:name=".MissingStorageActivity"'
 manifest = replace_once(
@@ -1301,6 +1329,16 @@ PY
 
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
+
+# The TSI recordings gallery shares MP4 files through this provider path map.
+TSI_FILE_PROVIDER_XML="$TSI_ROOT/app/src/main/res/xml/tsi_file_paths.xml"
+if [ -f "$TSI_FILE_PROVIDER_XML" ]; then
+    mkdir -p "$APP_ROOT/src/main/res/xml"
+    cp "$TSI_FILE_PROVIDER_XML" "$APP_ROOT/src/main/res/xml/tsi_file_paths.xml"
+else
+    echo "TSI FileProvider path configuration is missing: $TSI_FILE_PROVIDER_XML" >&2
+    exit 1
+fi
 
 mkdir -p "$APP_ROOT/src/main/assets/licenses"
 cp "$AMETHYST_ROOT/LICENSE" "$APP_ROOT/src/main/assets/licenses/AMETHYST-LGPL-3.0.txt"

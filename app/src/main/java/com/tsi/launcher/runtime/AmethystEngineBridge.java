@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.SystemClock;
+import com.tsi.launcher.instances.GameInstance;
+import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.storage.AmethystStoragePaths;
 import org.json.JSONObject;
 import java.io.File;
@@ -387,7 +389,7 @@ public final class AmethystEngineBridge {
                 ? new File(minecraftRoot.getParentFile() == null ? minecraftRoot : minecraftRoot.getParentFile(), "shared_dir")
                 : new File(selectedInstanceRoot, "game");
         ensureDirectory(gameDirectory);
-        ensureVivoFriendlyOptions(context, gameDirectory);
+        applyPerformanceProfile(context, safeInstanceId, gameDirectory, false);
 
         String safePlayer = sanitizePlayerName(playerName);
         String safeRenderer = optionalIdentifier(rendererId, "renderer identifier", 80);
@@ -397,6 +399,12 @@ public final class AmethystEngineBridge {
                     .invoke(null, context, safeRenderer);
             if (!(compatible instanceof Boolean) || !((Boolean) compatible)) {
                 throw new IllegalArgumentException("Renderer " + safeRenderer + " is not available or incompatible.");
+            }
+            if (com.tsi.launcher.plugins.ExternalRendererRegistry.isExternalRenderer(context, safeRenderer)) {
+                // Validate the plugin again immediately before launch, including its
+                // declared Minecraft version range and active-ABI native dependencies.
+                com.tsi.launcher.plugins.ExternalRendererRegistry.prepare(
+                        context, safeRenderer, safeVersion);
             }
         }
         if (argsMode < 0 || argsMode > 2) throw new IllegalArgumentException("Unsupported JVM argument merge mode.");
@@ -434,25 +442,80 @@ public final class AmethystEngineBridge {
         context.startActivity(intent);
     }
 
-    private static void ensureVivoFriendlyOptions(Context context, File gameDirectory) throws IOException {
-        File optionsFile = new File(gameDirectory, "options.txt");
-        if (optionsFile.isFile() && optionsFile.length() > 0L) return;
+    /**
+     * Applies a device-aware FPS preset once per game instance. The manual action
+     * can force a re-apply; normal launches never keep overwriting player changes.
+     */
+    public static String applyPerformanceProfile(Context context, String instanceId,
+                                                  boolean force) throws IOException {
+        String safeInstanceId = validateInstanceId(instanceId);
+        GameInstance selected = null;
+        for (GameInstance candidate : new GameInstanceRepository(context).list()) {
+            if (safeInstanceId.equals(candidate.getId())) {
+                selected = candidate;
+                break;
+            }
+        }
+        if (selected == null) throw new IOException("Selected Minecraft instance no longer exists.");
+        return applyPerformanceProfile(context, safeInstanceId, selected.getGameDirectory(), force);
+    }
+
+    private static String applyPerformanceProfile(Context context, String instanceId,
+                                                   File selectedGameDirectory,
+                                                   boolean force) throws IOException {
+        String safeInstanceId = validateInstanceId(instanceId);
+        if (selectedGameDirectory == null) {
+            throw new IOException("Selected Minecraft instance has no game directory.");
+        }
+
         DevicePerformanceProfileSnapshot device = DevicePerformanceProfile.detect(context);
-        StringBuilder defaults = new StringBuilder();
-        defaults.append("renderDistance:").append(device.getRenderDistance()).append('\n');
-        defaults.append("simulationDistance:").append(device.getSimulationDistance()).append('\n');
-        defaults.append("graphics:fast\n")
-                .append("fancyGraphics:false\n")
-                .append("ao:0.0\n")
-                .append("entityDistanceScaling:0.5\n")
-                .append("particles:1\n")
-                .append("maxFps:").append(device.getMaxFps()).append('\n')
-                .append("mipmapLevels:").append(device.getMipmapLevels()).append('\n')
-                .append("biomeBlendRadius:0\n")
-                .append("renderClouds:fast\n")
-                .append("entityShadows:false\n")
-                .append("useVbo:true\n");
-        writeAtomically(optionsFile, defaults.toString());
+        android.content.SharedPreferences preferences =
+                context.getSharedPreferences("tsi_launcher_preferences", Context.MODE_PRIVATE);
+        String preferenceKey = "fps_profile_" + safeInstanceId;
+        String profileSignature = "fps-v1|" + DevicePerformanceProfile.profileKey(context);
+        if (!force && profileSignature.equals(preferences.getString(preferenceKey, ""))) {
+            return "FPS profile is already current for this device (" + device.getTierLabel() + ").";
+        }
+
+        File minecraftRoot = AmethystStoragePaths.minecraftHome(context).getCanonicalFile();
+        File instancesRoot = new File(minecraftRoot, "instances").getCanonicalFile();
+        File instanceRoot = new File(instancesRoot, safeInstanceId).getCanonicalFile();
+        if (!instanceRoot.getPath().startsWith(instancesRoot.getPath() + File.separator)) {
+            throw new IOException("Selected Minecraft instance points outside the instances folder.");
+        }
+
+        File gameDirectory = selectedGameDirectory.getCanonicalFile();
+        File instanceGameDirectory = new File(instanceRoot, "game").getCanonicalFile();
+        File sharedDataDirectory = new File(
+                minecraftRoot.getParentFile() == null ? minecraftRoot : minecraftRoot.getParentFile(),
+                "shared_dir").getCanonicalFile();
+        if (!gameDirectory.equals(instanceGameDirectory)
+                && !gameDirectory.equals(sharedDataDirectory)) {
+            throw new IOException("Selected game folder is not owned by this Minecraft instance.");
+        }
+        ensureDirectory(gameDirectory);
+
+        File optionsFile = new File(gameDirectory, "options.txt");
+        String existingOptions = optionsFile.isFile() ? readText(optionsFile) : "";
+        String optimizedOptions = MinecraftPerformanceOptions.merge(existingOptions, device);
+        writeAtomically(optionsFile, optimizedOptions);
+
+        if (!preferences.edit().putString(preferenceKey, profileSignature).commit()) {
+            throw new IOException("Could not save the applied FPS profile.");
+        }
+
+        return "FPS profile applied: " + device.getTierLabel()
+                + " • render distance " + device.getRenderDistance()
+                + " • simulation distance " + device.getSimulationDistance()
+                + " • FPS cap " + device.getMaxFps() + ".";
+    }
+
+    private static String validateInstanceId(String instanceId) {
+        String safeInstanceId = instanceId == null ? "" : instanceId.trim();
+        if (!safeInstanceId.matches("[A-Za-z0-9._+\\-]{1,100}")) {
+            throw new IllegalArgumentException("Invalid game instance identifier for FPS tuning.");
+        }
+        return safeInstanceId;
     }
 
     private static void ensureDefaultControlMap(Context context) throws IOException {

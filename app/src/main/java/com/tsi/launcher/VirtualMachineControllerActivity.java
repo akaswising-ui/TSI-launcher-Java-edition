@@ -14,11 +14,17 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import com.tsi.launcher.instances.GameInstance;
+import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.runtime.AmethystEngineBridge;
 import com.tsi.launcher.runtime.AndroidJreInstaller;
 import com.tsi.launcher.runtime.DetectedJavaRuntime;
+import com.tsi.launcher.runtime.DevicePerformanceProfile;
+import com.tsi.launcher.runtime.DevicePerformanceProfileSnapshot;
 import com.tsi.launcher.runtime.JavaRuntimeManager;
 import com.tsi.launcher.runtime.VersionVmInspection;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +37,7 @@ public final class VirtualMachineControllerActivity extends Activity {
     private JavaRuntimeManager manager;
     private AndroidJreInstaller jreInstaller;
     private VersionVmInspection inspection;
+    private GameInstance instanceConfig;
     private String versionId;
     private String instanceId;
     private String playerName;
@@ -43,6 +50,7 @@ public final class VirtualMachineControllerActivity extends Activity {
     private Button refreshButton;
     private Button installButton;
     private Button startButton;
+    private Button optimizeButton;
     private boolean busy;
     private List<DetectedJavaRuntime> runtimes = new ArrayList<>();
 
@@ -58,7 +66,15 @@ public final class VirtualMachineControllerActivity extends Activity {
         if (playerName == null) playerName = "Steve";
         SharedPreferences preferences = getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE);
         heapMb = preferences.getInt("ram_mb", com.tsi.launcher.runtime.DevicePerformanceProfile.recommendedHeapMb(this));
-        runtimePreference = preferences.getString("java_runtime", "Auto");
+        try {
+            instanceConfig = new GameInstanceRepository(getApplicationContext()).get(instanceId);
+            if (instanceConfig != null) versionId = instanceConfig.getVersionId();
+        } catch (Exception ignored) {
+            instanceConfig = null;
+        }
+        runtimePreference = normalizeRuntimePreference(
+                instanceConfig == null ? null : instanceConfig.getSelectedRuntime(),
+                preferences.getString("java_runtime", "Auto"));
         buildUi();
         refreshInspection();
     }
@@ -105,6 +121,16 @@ public final class VirtualMachineControllerActivity extends Activity {
         memoryRow.addView(increase, new LinearLayout.LayoutParams(0, dp(48), 1f));
         root.addView(memoryRow, matchWrap());
 
+        root.addView(section("FPS OPTIMIZATION"));
+        DevicePerformanceProfileSnapshot fpsProfile = DevicePerformanceProfile.detect(this);
+        addText(root, "Auto-detected " + fpsProfile.getTierLabel()
+                + " profile • " + fpsProfile.getRenderDistance() + " chunks"
+                + " • " + fpsProfile.getSimulationDistance() + " simulation"
+                + " • " + fpsProfile.getMaxFps() + " FPS cap", 12, 0xFF183B4A, false);
+        optimizeButton = button("APPLY FPS OPTIMIZATION");
+        optimizeButton.setOnClickListener(v -> applyFpsOptimization());
+        root.addView(optimizeButton, matchWrap());
+
         root.addView(section("LAUNCH PIPELINE"));
         requirements = addText(root, "Waiting for inspection…", 12, 0xFF183B4A, false);
         refreshButton = button("REFRESH VM STATUS");
@@ -116,6 +142,11 @@ public final class VirtualMachineControllerActivity extends Activity {
         startButton.setTextColor(0xFFFFFFFF);
         startButton.setOnClickListener(v -> startGame());
         root.addView(startButton, matchWrap());
+
+        root.addView(section("TOOLS"));
+        Button clearCache = button("CLEAR LAUNCHER CACHE");
+        clearCache.setOnClickListener(v -> clearLauncherCache());
+        root.addView(clearCache, matchWrap());
 
         status = addText(root, "VM is stopped.", 12, 0xFF71838B, false);
         Button back = button("BACK TO DASHBOARD");
@@ -219,8 +250,49 @@ public final class VirtualMachineControllerActivity extends Activity {
         else runtimePreference = "Name:" + runtimes.get(Math.min(selected - 1, runtimes.size() - 1)).getName();
         getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE).edit()
                 .putString("java_runtime", runtimePreference).apply();
-        setStatus("Runtime preference saved.");
-        refreshInspection();
+
+        if (instanceConfig == null) {
+            setStatus("Default runtime preference saved.");
+            refreshInspection();
+            return;
+        }
+        if (busy) {
+            setStatus("Wait for the current operation to finish before saving the runtime.");
+            return;
+        }
+        busy = true;
+        setStatus("Saving runtime selection for this instance…");
+        final String savedRuntime = "Auto".equals(runtimePreference) ? null : runtimePreference;
+        io.execute(() -> {
+            try {
+                GameInstanceRepository repository = new GameInstanceRepository(getApplicationContext());
+                instanceConfig = repository.updateLaunchSettings(instanceId,
+                        instanceConfig.getRendererId(), instanceConfig.getJavaArgs(),
+                        savedRuntime, instanceConfig.getControlLayout(), instanceConfig.getArgsMode(),
+                        instanceConfig.isSharedData());
+                main.post(() -> {
+                    busy = false;
+                    setStatus("Runtime preference saved for " + instanceConfig.getName() + ".");
+                    refreshInspection();
+                });
+            } catch (Exception error) {
+                main.post(() -> {
+                    busy = false;
+                    setStatus("Could not save instance runtime: " + message(error));
+                });
+            }
+        });
+    }
+
+    private static String normalizeRuntimePreference(String value, String fallback) {
+        String saved = value == null ? "" : value.trim();
+        if (saved.isEmpty()) return fallback == null ? "Auto" : fallback;
+        if ("Auto".equalsIgnoreCase(saved)) return "Auto";
+        if (saved.startsWith("Name:")) return saved;
+        if (saved.matches("(?i)Java\\s*[0-9]{1,2}") || saved.matches("[0-9]{1,2}")) {
+            return saved.replaceAll("(?i)^Java\\s*", "Java");
+        }
+        return "Name:" + saved;
     }
 
     private void installRuntime() {
@@ -261,6 +333,30 @@ public final class VirtualMachineControllerActivity extends Activity {
         setStatus("Heap request saved: " + heapMb + " MB (device limit " + maximum + " MB).");
     }
 
+    private void applyFpsOptimization() {
+        if (busy) return;
+        busy = true;
+        optimizeButton.setEnabled(false);
+        setStatus("Applying FPS settings to this Minecraft instance…");
+        io.execute(() -> {
+            try {
+                String result = AmethystEngineBridge.applyPerformanceProfile(
+                        getApplicationContext(), instanceId, true);
+                main.post(() -> {
+                    busy = false;
+                    optimizeButton.setEnabled(true);
+                    setStatus(result);
+                });
+            } catch (Exception error) {
+                main.post(() -> {
+                    busy = false;
+                    optimizeButton.setEnabled(true);
+                    setStatus("FPS optimization failed: " + message(error));
+                });
+            }
+        });
+    }
+
     private void startGame() {
         if (busy || inspection == null || !inspection.isReadyToLaunch()) {
             setStatus("Launch blocked by preflight. Resolve every missing requirement first.");
@@ -281,7 +377,12 @@ public final class VirtualMachineControllerActivity extends Activity {
                 main.post(() -> {
                     try {
                         AmethystEngineBridge.launch(this, versionId, heapMb, runtime, playerName,
-                                instanceId, null, null, null, 0, false);
+                                instanceId,
+                                instanceConfig == null ? null : instanceConfig.getRendererId(),
+                                instanceConfig == null ? null : instanceConfig.getJavaArgs(),
+                                instanceConfig == null ? null : instanceConfig.getControlLayout(),
+                                instanceConfig == null ? 0 : instanceConfig.getArgsMode(),
+                                instanceConfig != null && instanceConfig.isSharedData());
                         setStatus("Starting Minecraft " + versionId + "…");
                     } catch (Exception error) {
                         busy = false;
@@ -299,6 +400,68 @@ public final class VirtualMachineControllerActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void clearLauncherCache() {
+        if (busy) {
+            setStatus("Wait until the current launcher operation finishes before clearing cache.");
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Clear launcher cache?")
+                .setMessage("This removes temporary cache files only. Minecraft worlds, mods, configs, installed versions and Java runtimes are kept.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("CLEAR", (dialog, which) -> {
+                    setStatus("Clearing temporary cache files…");
+                    io.execute(() -> {
+                        try {
+                            long removed = clearCacheChildren(getCacheDir());
+                            File external = getExternalCacheDir();
+                            if (external != null && !external.getCanonicalFile()
+                                    .equals(getCacheDir().getCanonicalFile())) {
+                                removed += clearCacheChildren(external);
+                            }
+                            long total = removed;
+                            main.post(() -> setStatus("Launcher cache cleared • "
+                                    + android.text.format.Formatter.formatShortFileSize(this, total)
+                                    + " released. Worlds and game files were preserved."));
+                        } catch (Exception error) {
+                            main.post(() -> setStatus("Cache clear failed: " + message(error)));
+                        }
+                    });
+                })
+                .show();
+    }
+
+    private static long clearCacheChildren(File directory) throws IOException {
+        if (!directory.exists()) return 0L;
+        if (!directory.isDirectory()) throw new IOException("Cache location is not a directory.");
+        File root = directory.getCanonicalFile();
+        File[] children = directory.listFiles();
+        if (children == null) throw new IOException("Could not read the cache directory.");
+        long removed = 0L;
+        for (File child : children) removed += deleteCacheEntry(root, child);
+        return removed;
+    }
+
+    private static long deleteCacheEntry(File root, File entry) throws IOException {
+        File canonical = entry.getCanonicalFile();
+        if (!canonical.equals(root)
+                && !canonical.getPath().startsWith(root.getPath() + File.separator)) {
+            long length = entry.length();
+            if (!entry.delete()) throw new IOException("Could not remove cache link: " + entry.getName());
+            return Math.max(0L, length);
+        }
+        long removed = 0L;
+        if (entry.isDirectory()) {
+            File[] children = entry.listFiles();
+            if (children == null) throw new IOException("Could not read cache folder: " + entry.getName());
+            for (File child : children) removed += deleteCacheEntry(root, child);
+        } else {
+            removed = Math.max(0L, entry.length());
+        }
+        if (!entry.delete()) throw new IOException("Could not remove cache file: " + entry.getName());
+        return removed;
     }
 
     private TextView section(String title) {

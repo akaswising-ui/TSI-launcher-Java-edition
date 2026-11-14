@@ -27,6 +27,15 @@ TSI embeds the pinned Amethyst Android engine rather than reimplementing a deskt
 - **Versions and runtime:** TSI's catalogue, complete client/library/asset installer and Java 8/17/21/25 Android runtime packages connect to Amethyst's MultiRT/JVM pipeline.
 - **Mod loaders:** Forge, Fabric, Quilt, NeoForge and OptiFine installer paths remain in the embedded engine. TSI's integration adds shared runtime selection and inherited vanilla-version resolution.
 - **Modpacks:** The TSI Mod Pack screen now uses the embedded Modrinth + CurseForge APIs for live search, version selection, installation, and ZIP/MRPACK import. It no longer displays sample preview packs.
+- **Hyper Launcher files:** The instance ZIP importer accepts Hyper's native `hyper_instance.json` folder archive as well as the MultiMC/Prism format (`instance.cfg`, `mmc-pack.json`, `.minecraft/`). Known renderer IDs are mapped to Amethyst equivalents; Hyper-only runtime/control paths are not copied into TSI's private app storage. Modded Hyper folder archives must include the loader version JSON; otherwise export from Hyper as a MultiMC/Prism-compatible ZIP so the loader metadata is included. The instance manager also accepts `.7z` archives; extraction is streamed with entry-count, per-file, total-size and decoder-memory limits before using the same hardened instance importer.
+- **Portable exports:** TSI's `instance.cfg` + `mmc-pack.json` + `.minecraft/` ZIP export is compatible with MultiMC/Prism-style importers, including Hyper's MMC importer.
+- **Per-instance launch settings:** The instance editor saves the runtime, renderer, JVM arguments, control-layout name, argument mode and shared-data choice. The VM controller now passes those values to the embedded Amethyst launch profile instead of silently dropping them.
+- **Installed mods:** The Mod Pack screen links to a per-instance local `.jar` manager that validates JAR/ZIP structure and supports import, enable, disable and delete without touching other instances.
+- **Game tools:** Video-only Android MediaProjection screen recorder and MP4 gallery; scoped-storage SAF file manager; custom image icons per instance; consent-based local/Gemini crash diagnostics; floating shortcut panel; installed legacy FCL/Zalith renderer APK manager with native renderer-ID hand-off and per-version compatibility checks; AdrenoTools-style custom Turnip driver ZIP manager for compatible Adreno/Vulkan devices.
+- **Quick panel:** The floating shortcut bubble opens the recorder, gallery, file manager, installed mods, crash analyzer, external renderer list, Vulkan driver packages, LiteLoader installer and engine settings. It is user-enabled and needs Android Display over other apps permission.
+- **LiteLoader:** Experimental installer for supported HTTPS Maven metadata entries on Minecraft 1.8.9–1.12.2. It creates an inherited Java version profile. Ivy-only packages and insecure download hosts are rejected.
+- **Android restrictions:** Screen recording requires the Android capture-consent dialog each time. The file manager works only inside the folder the user grants. The floating panel requires the Android overlay permission. Custom Turnip libraries require matching process ABI and a supported Adreno/Vulkan device. The recorder does not capture internal game or microphone audio.
+- **Hyper Java feature map:** See [Hyper Java Edition parity and compatibility boundaries](docs/HYPER_JAVA_PARITY.md) for the full supported/unsupported list.
 - **Controls and graphics:** Amethyst's custom touch controls, keyboard/mouse/gamepad input, renderer options and video settings are retained in the engine. They have not all been duplicated as Compose settings panels.
 - **Accounts:** Microsoft sign-in and local/offline profiles both use Amethyst's original account system. TSI's account action opens the native account selector; it does not collect Microsoft passwords in TSI's own screens. Offline profiles do not grant authenticated-server access or bypass ownership checks.
 
@@ -43,6 +52,16 @@ The launcher reads Android's reported physical RAM and applies a conservative Ja
 - Older saved values above the device limit are clamped before the JVM starts.
 
 The lower profile avoids assigning too much of a 2 GB phone's memory to the Java heap while Android, SDL, LWJGL, graphics and audio still need RAM. Heap size is not total game memory. Very recent Minecraft versions and large modpacks may still exceed what a low-memory phone can run.
+
+## FPS and low-end device optimization
+
+The engine integration keeps the APK debuggable, but passes `NDK_DEBUG=0` to Amethyst's `ndk-build` so its native C/C++ host libraries are compiled with release optimizations (`-O2`) while retaining debug symbols. This avoids shipping an unoptimized native debug build as the gameplay APK.
+
+On the first launch for each game instance, TSI applies a device-aware video preset to that instance's existing `options.txt`. It reduces render/simulation distance, switches graphics to Fast, minimizes particles, disables clouds and VSync, and applies a RAM-tier FPS ceiling. The manual **APPLY FPS OPTIMIZATION** action can reapply the preset later. Unrelated settings such as audio, key bindings and resource-pack selections are preserved. Once the automatic preset has been applied, later launches do not overwrite player changes unless the device profile changes.
+
+Renderer selection is device-aware. For a new profile on Minecraft 1.17+, TSI prefers LTW when Amethyst confirms OpenGL ES 3 and the bundled LTW library are available; otherwise it prefers compatible GL4ES/Krypton and then MobileGlues. The original per-profile **Renderer** selector in Amethyst Profile Editor is retained, so users can manually choose any renderer that Amethyst reports as compatible. Existing valid manual selections are never overridden.
+
+This reduces avoidable launcher/native overhead and GPU work, but it cannot guarantee a specific FPS. Minecraft version, renderer, GPU driver, thermal throttling, mods and world complexity remain major factors. The Android launcher UI remains Java because it uses Android lifecycle and Amethyst APIs; replacing that glue with Rust/C++ would not itself accelerate Minecraft's renderer.
 
 ## Storage layout
 
@@ -76,6 +95,7 @@ The build output is staged as `TSI-Launcher-engine-debug.apk`, uploaded as a 90-
 ## Scope and compatibility
 
 - This repository is Java Edition only. It does not detect or launch the Bedrock Android package.
+- Hyper Launcher Horizon/Rust-only instances are a different engine format and are not executable by this Java Edition runtime.
 - A desktop Java installation is not sufficient. The launcher needs an Android-built JRE and the Android game host/native components.
 - Java runtime selection follows the version metadata's required major version.
 - Some historical versions may still require native or renderer compatibility work.

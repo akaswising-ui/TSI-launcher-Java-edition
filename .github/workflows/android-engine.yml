@@ -69,6 +69,15 @@ jobs:
       - name: Integrate Java-only TSI launcher with Amethyst engine
         run: bash scripts/integrate-amethyst-engine.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
+      - name: Apply adaptive renderer default
+        run: python3 scripts/apply-adaptive-renderer.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
+      - name: Apply installed FCL renderer APK support
+        run: python3 scripts/apply-fcl-renderer-plugins.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
+      - name: Apply custom Adreno Turnip driver packages
+        run: python3 scripts/apply-adreno-driver-packages.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
       - name: Generate Amethyst language list
         working-directory: .build/Amethyst-Android
         run: bash scripts/languagelist_updater.sh
@@ -160,6 +169,11 @@ jobs:
               "Lcom/tsi/launcher/storage/AmethystStoragePaths;",
               "Lcom/tsi/launcher/storage/VersionDirectoryManager;",
               "Lcom/tsi/launcher/instances/GameInstanceRepository;",
+              "importHyperInstanceArchive",
+              "importArchive",
+              "convertSevenZipToZip",
+              "setMaxMemoryLimitKiB",
+              "hyper_instance.json",
               "Lcom/tsi/launcher/GameInstanceManagerActivity;",
               "GAME INSTANCES",
               "IMPORT ZIP",
@@ -187,6 +201,32 @@ jobs:
               "Lnet/kdt/pojavlaunch/MissingStorageActivity;",
               "Lnet/kdt/pojavlaunch/fragments/FileSelectorFragment;",
               "Lcom/tsi/launcher/ModPackManagerActivity;",
+              "Lcom/tsi/launcher/InstalledModManagerActivity;",
+              "Lcom/tsi/launcher/ExternalRendererManagerActivity;",
+              "Lcom/tsi/launcher/plugins/ExternalRendererRegistry;",
+              "getPreparedGraphicsLibrary",
+              "nativeRendererId",
+              "POJAV_RENDERER",
+              "supportsMinecraftVersion",
+              "compareNumericVersions",
+              "tsi.fcl.",
+              "EXTERNAL RENDERER PLUGINS",
+              "Lcom/tsi/launcher/VulkanDriverManagerActivity;",
+              "Lcom/tsi/launcher/LiteLoaderInstallActivity;",
+              "Lcom/tsi/launcher/modloaders/LiteLoaderInstaller;",
+              "INSTALL LITELOADER (LEGACY 1.8.9–1.12.2)",
+              "Lcom/tsi/launcher/vulkan/AdrenoDriverPackageManager;",
+              "selectedForNativeLoader",
+              "Lcom/tsi/launcher/GameQuickToolsService;",
+              "INSTALLED MODS",
+              "EXTERNAL RENDERER PLUGINS",
+              "LITELOADER INSTALLER",
+              "POJAV_TURNIP_DIR",
+              "POJAV_TURNIP_LIBRARY",
+              "Lcom/tsi/launcher/instances/InstalledModManager;",
+              "importJar",
+              ".jar.disabled",
+              "MANAGE INSTALLED .JAR MODS",
               "IMPORT .ZIP / .MRPACK",
               "Live Modrinth and CurseForge modpack catalogue",
               "OPEN FORGE / FABRIC / QUILT / NEOFORGE / OPTIFINE INSTALLERS",
@@ -197,6 +237,12 @@ jobs:
               "TSI_ArgsMode",
               "TSI_SharedData",
               "pojavRendererName",
+              "Auto-selected high-performance renderer ",
+              "No compatible Android renderer is available.",
+              "opengles_mobileglues",
+              "opengles3_ltw",
+              "isLtwMinecraftVersion",
+              "Lnet/kdt/pojavlaunch/fragments/ProfileEditorFragment;",
               "controlFile",
           ]
           missing = [item for item in required if item not in dex_strings]
@@ -204,6 +250,25 @@ jobs:
               raise SystemExit("TSI Java application code is missing from the APK DEX: " + ", ".join(missing))
           print("Verified TSI Java activities and Amethyst engine bridge in APK DEX.")
           PY
+
+      - name: Verify TSI runtime and privacy permissions in APK manifest
+        shell: bash
+        run: |
+          APK=".build/Amethyst-Android/app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          PERMISSIONS="$("$AAPT" dump permissions "$APK")"
+          for permission in \
+            android.permission.QUERY_ALL_PACKAGES \
+            android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION \
+            android.permission.FOREGROUND_SERVICE_SPECIAL_USE \
+            android.permission.SYSTEM_ALERT_WINDOW; do
+            if ! grep -Fq "$permission" <<< "$PERMISSIONS"; then
+              echo "Required TSI permission missing from APK manifest: $permission"
+              exit 1
+            fi
+          done
+          echo "Verified TSI renderer discovery, recorder and floating overlay permissions."
 
       - name: Stage TSI engine APK
         shell: bash

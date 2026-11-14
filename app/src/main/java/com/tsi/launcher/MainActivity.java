@@ -160,6 +160,22 @@ public final class MainActivity extends Activity {
         addAction(root, "MODS & MODPACKS", v -> openModpacks());
         addAction(root, "ENGINE SETTINGS", v -> openAmethyst("tsi_open_engine_settings"));
 
+        root.addView(sectionTitle("GAME TOOLS"));
+        addAction(root, "SCREEN RECORDER", v ->
+                startActivity(new Intent(this, GameRecorderActivity.class)));
+        addAction(root, "RECORDINGS GALLERY", v ->
+                startActivity(new Intent(this, GameRecordingsGalleryActivity.class)));
+        addAction(root, "FILE MANAGER", v ->
+                startActivity(new Intent(this, StorageFileManagerActivity.class)));
+        addAction(root, "GEMINI CRASH ANALYZER", v ->
+                startActivity(new Intent(this, CrashAnalyzerActivity.class)));
+        addAction(root, "EXTERNAL RENDERER PLUGINS", v ->
+                startActivity(new Intent(this, ExternalRendererManagerActivity.class)));
+        addAction(root, "VULKAN / ADRENO DRIVER PACKAGES", v ->
+                startActivity(new Intent(this, VulkanDriverManagerActivity.class)));
+        addAction(root, GameQuickToolsService.isRunning()
+                ? "DISABLE GAME QUICK PANEL" : "ENABLE GAME QUICK PANEL", v -> toggleQuickPanel());
+
         root.addView(sectionTitle("STATUS"));
         statusText = text("Connecting to Mojang version catalogue…", 12, 0xFF71838B, false);
         statusText.setPadding(0, dp(7), 0, dp(12));
@@ -312,16 +328,24 @@ public final class MainActivity extends Activity {
     }
 
     private void openVmController() {
+        GameInstance selectedInstance = null;
+        try {
+            selectedInstance = instanceRepository.selected();
+            if (selectedInstance != null) activeInstance = selectedInstance;
+        } catch (Exception error) {
+            setStatus("Could not read the selected game instance: " + message(error));
+            return;
+        }
         MinecraftVersion version = selectedVersion();
-        String versionId = version == null
-                ? preferences.getString("selected_version_id", "") : version.getId();
+        String versionId = selectedInstance != null ? selectedInstance.getVersionId()
+                : version == null ? preferences.getString("selected_version_id", "") : version.getId();
         if (versionId == null || versionId.trim().isEmpty()) {
             setStatus("Select and install a Minecraft version first.");
             return;
         }
         Intent intent = new Intent(this, VirtualMachineControllerActivity.class);
         intent.putExtra("version_id", versionId);
-        intent.putExtra("instance_id", activeInstance == null ? versionId : activeInstance.getId());
+        intent.putExtra("instance_id", selectedInstance == null ? versionId : selectedInstance.getId());
         intent.putExtra("player_name", profileName);
         startActivity(intent);
     }
@@ -335,6 +359,26 @@ public final class MainActivity extends Activity {
 
     private void openModpacks() {
         startActivity(new Intent(this, ModPackManagerActivity.class));
+    }
+
+    private void toggleQuickPanel() {
+        if (GameQuickToolsService.isRunning()) {
+            stopService(new Intent(this, GameQuickToolsService.class));
+            setStatus("TSI Game Quick Panel disabled.");
+            return;
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            setStatus("Allow Display over other apps, then tap ENABLE GAME QUICK PANEL again.");
+            Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(permission);
+            return;
+        }
+        Intent service = new Intent(this, GameQuickToolsService.class)
+                .setAction(GameQuickToolsService.ACTION_START);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
+        else startService(service);
+        setStatus("TSI Game Quick Panel is starting.");
     }
 
     private void openAmethyst(String extra) {
