@@ -169,9 +169,13 @@ public final class ExternalRendererRegistry {
                         String safe = safeLibraryName(extra.trim());
                         if (!dlopen.contains(safe)) dlopen.add(safe);
                     }
-                } else if ("LIB_MESA_NAME".equals(key) || "MESA_LIBRARY".equals(key)) {
+                } else if ("LIB_MESA_NAME".equals(key) || "MESA_LIBRARY".equals(key) ||
+                        "POJAVEXEC_EGL".equals(key)) {
                     String safe = safeLibraryName(value);
-                    environment.put(key, new File(nativeRoot, safe).getCanonicalPath());
+                    File optionalLibrary = new File(nativeRoot, safe).getCanonicalFile();
+                    if (nativeRoot.equals(optionalLibrary.getParentFile()) && optionalLibrary.isFile()) {
+                        environment.put(key, optionalLibrary.getAbsolutePath());
+                    }
                 } else if (!"LD_LIBRARY_PATH".equals(key) && !"LD_PRELOAD".equals(key)
                         && !"PATH".equals(key) && !"HOME".equals(key)) {
                     environment.put(key, value);
