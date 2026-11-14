@@ -171,6 +171,8 @@ public final class MainActivity extends Activity {
                 startActivity(new Intent(this, CrashAnalyzerActivity.class)));
         addAction(root, "EXTERNAL RENDERER PLUGINS", v ->
                 startActivity(new Intent(this, ExternalRendererManagerActivity.class)));
+        addAction(root, "VULKAN / ADRENO DRIVER PACKAGES", v ->
+                startActivity(new Intent(this, VulkanDriverManagerActivity.class)));
         addAction(root, GameQuickToolsService.isRunning()
                 ? "DISABLE GAME QUICK PANEL" : "ENABLE GAME QUICK PANEL", v -> toggleQuickPanel());
 
