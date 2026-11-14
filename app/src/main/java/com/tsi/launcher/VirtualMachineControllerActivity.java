@@ -17,6 +17,8 @@ import android.widget.TextView;
 import com.tsi.launcher.runtime.AmethystEngineBridge;
 import com.tsi.launcher.runtime.AndroidJreInstaller;
 import com.tsi.launcher.runtime.DetectedJavaRuntime;
+import com.tsi.launcher.runtime.DevicePerformanceProfile;
+import com.tsi.launcher.runtime.DevicePerformanceProfileSnapshot;
 import com.tsi.launcher.runtime.JavaRuntimeManager;
 import com.tsi.launcher.runtime.VersionVmInspection;
 import java.util.ArrayList;
@@ -43,6 +45,7 @@ public final class VirtualMachineControllerActivity extends Activity {
     private Button refreshButton;
     private Button installButton;
     private Button startButton;
+    private Button optimizeButton;
     private boolean busy;
     private List<DetectedJavaRuntime> runtimes = new ArrayList<>();
 
@@ -104,6 +107,16 @@ public final class VirtualMachineControllerActivity extends Activity {
         memoryRow.addView(decrease, new LinearLayout.LayoutParams(0, dp(48), 1f));
         memoryRow.addView(increase, new LinearLayout.LayoutParams(0, dp(48), 1f));
         root.addView(memoryRow, matchWrap());
+
+        root.addView(section("FPS OPTIMIZATION"));
+        DevicePerformanceProfileSnapshot fpsProfile = DevicePerformanceProfile.detect(this);
+        addText(root, "Auto-detected " + fpsProfile.getTierLabel()
+                + " profile • " + fpsProfile.getRenderDistance() + " chunks"
+                + " • " + fpsProfile.getSimulationDistance() + " simulation"
+                + " • " + fpsProfile.getMaxFps() + " FPS cap", 12, 0xFF183B4A, false);
+        optimizeButton = button("APPLY FPS OPTIMIZATION");
+        optimizeButton.setOnClickListener(v -> applyFpsOptimization());
+        root.addView(optimizeButton, matchWrap());
 
         root.addView(section("LAUNCH PIPELINE"));
         requirements = addText(root, "Waiting for inspection…", 12, 0xFF183B4A, false);
@@ -259,6 +272,30 @@ public final class VirtualMachineControllerActivity extends Activity {
         getSharedPreferences("tsi_launcher_preferences", MODE_PRIVATE)
                 .edit().putInt("ram_mb", heapMb).apply();
         setStatus("Heap request saved: " + heapMb + " MB (device limit " + maximum + " MB).");
+    }
+
+    private void applyFpsOptimization() {
+        if (busy) return;
+        busy = true;
+        optimizeButton.setEnabled(false);
+        setStatus("Applying FPS settings to this Minecraft instance…");
+        io.execute(() -> {
+            try {
+                String result = AmethystEngineBridge.applyPerformanceProfile(
+                        getApplicationContext(), instanceId, true);
+                main.post(() -> {
+                    busy = false;
+                    optimizeButton.setEnabled(true);
+                    setStatus(result);
+                });
+            } catch (Exception error) {
+                main.post(() -> {
+                    busy = false;
+                    optimizeButton.setEnabled(true);
+                    setStatus("FPS optimization failed: " + message(error));
+                });
+            }
+        });
     }
 
     private void startGame() {
