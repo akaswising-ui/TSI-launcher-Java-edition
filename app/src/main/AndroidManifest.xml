@@ -23,5 +23,6 @@
         <activity android:name=".VirtualMachineControllerActivity" android:exported="false" />
         <activity android:name=".GameInstanceManagerActivity" android:exported="false" />
         <activity android:name=".ModPackManagerActivity" android:exported="false" />
+        <activity android:name=".InstalledModManagerActivity" android:exported="false" />
     </application>
 </manifest>
