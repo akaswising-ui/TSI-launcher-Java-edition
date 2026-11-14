@@ -122,7 +122,7 @@ required = [
     'if (Tools.LOCAL_RENDERER == null ||',
     '"opengles2"',
     '"opengles3_ltw"',
-    '"isLtwMinecraftVersion"',
+    'isLtwMinecraftVersion',
     '"opengles_mobileglues"',
     'renderersList.rendererIds.isEmpty()',
     'No compatible Android renderer is available.',
