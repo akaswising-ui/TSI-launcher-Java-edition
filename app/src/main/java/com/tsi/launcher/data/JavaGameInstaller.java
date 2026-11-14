@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Build;
 import com.tsi.launcher.storage.VersionDirectoryManager;
 import com.tsi.launcher.storage.VersionPaths;
+import com.tsi.launcher.nativecore.NativeBridge;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedInputStream;
@@ -358,76 +359,21 @@ public final class JavaGameInstaller {
     }
 
     private String downloadText(String rawUrl) throws Exception {
-        HttpURLConnection connection = openConnection(rawUrl);
-        try {
-            int code = connection.getResponseCode();
-            if (code < 200 || code > 299) throw new IOException("Metadata request failed: HTTP " + code);
-            validateUrl(connection.getURL().toURI().toString());
-            return readStream(connection.getInputStream());
-        } finally {
-            connection.disconnect();
-        }
+        File scratch = File.createTempFile("tsi-minecraft-metadata-", ".json", context.getCacheDir());
+        return NativeBridge.downloadText(rawUrl, scratch);
     }
 
     private void downloadVerified(String rawUrl, File target,
                                   String expectedSha1, long expectedSize) throws Exception {
-        HttpURLConnection connection = openConnection(rawUrl);
-        File parent = target.getParentFile();
-        if (parent == null) throw new IOException("Target has no parent folder");
-        ensureDirectory(parent);
-        File temporary = new File(parent, target.getName() + ".part");
-        MessageDigest digest = MessageDigest.getInstance("SHA-1");
-        long bytes = 0L;
-        try {
-            int code = connection.getResponseCode();
-            if (code < 200 || code > 299) {
-                throw new IOException("Download failed: HTTP " + code + " for " + rawUrl);
-            }
-            validateUrl(connection.getURL().toURI().toString());
-            try (BufferedInputStream input = new BufferedInputStream(connection.getInputStream());
-                 FileOutputStream output = new FileOutputStream(temporary)) {
-                byte[] buffer = new byte[64 * 1024];
-                int count;
-                while ((count = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, count);
-                    digest.update(buffer, 0, count);
-                    bytes += count;
-                }
-                output.getFD().sync();
-            }
-            if (expectedSize >= 0 && bytes != expectedSize) {
-                throw new IOException("File size verification failed for " + target.getName());
-            }
-            if (expectedSha1 != null) {
-                String actual = toHex(digest.digest());
-                if (!actual.equalsIgnoreCase(expectedSha1)) {
-                    throw new IOException("SHA-1 verification failed for " + target.getName());
-                }
-            }
-            replaceAtomically(temporary, target);
-        } catch (Exception error) {
-            temporary.delete();
-            throw error;
-        } finally {
-            connection.disconnect();
-        }
+
+        NativeBridge.downloadVerified(rawUrl, target, expectedSha1, expectedSize);
+
     }
 
-    private boolean isVerifiedFile(File file, String sha1, long expectedSize) {
-        if (!file.isFile()) return false;
-        if (expectedSize >= 0 && file.length() != expectedSize) return false;
-        if (sha1 == null) return expectedSize >= 0 && file.length() == expectedSize;
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            try (FileInputStream input = new FileInputStream(file)) {
-                byte[] buffer = new byte[64 * 1024];
-                int count;
-                while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
-            }
-            return toHex(digest.digest()).equalsIgnoreCase(sha1);
-        } catch (Exception ignored) {
-            return false;
-        }
+    private boolean isVerifiedFile(File file, String sha1, long expectedSize) throws IOException {
+
+        return NativeBridge.isVerifiedFile(file, sha1, expectedSize);
+
     }
 
     private HttpURLConnection openConnection(String rawUrl) throws Exception {

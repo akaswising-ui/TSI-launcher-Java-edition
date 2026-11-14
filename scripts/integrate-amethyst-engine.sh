@@ -1302,6 +1302,37 @@ PY
 mkdir -p "$APP_ROOT/src/main/java/com/tsi/launcher"
 cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 
+# Package the compiled Rust core for every ABI enabled by Amethyst.
+TSI_NATIVE_OUTPUT="$TSI_ROOT/native-output"
+for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+    test -s "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so"
+    mkdir -p "$APP_ROOT/src/main/prebuilt/$abi"
+    cp "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so" "$APP_ROOT/src/main/prebuilt/$abi/libtsi_core.so"
+done
+cp "$TSI_ROOT/native/cpp/tsi_jni.cpp" "$APP_ROOT/src/main/jni/tsi_jni.cpp"
+
+# Compile the C++ JNI adapter and link it against the Rust cdylib.
+ANDROID_MK="$APP_ROOT/src/main/jni/Android.mk"
+if ! grep -q 'LOCAL_MODULE := tsi_jni' "$ANDROID_MK"; then
+cat >> "$ANDROID_MK" <<'ANDROID_MK_TSI'
+
+# TSI native architecture: C++ JNI adapter -> Rust launcher core.
+LOCAL_PATH := $(HERE_PATH)
+include $(CLEAR_VARS)
+LOCAL_MODULE := tsi_core
+LOCAL_SRC_FILES := ../prebuilt/$(TARGET_ARCH_ABI)/libtsi_core.so
+include $(PREBUILT_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := tsi_jni
+LOCAL_SRC_FILES := tsi_jni.cpp
+LOCAL_CPPFLAGS += -std=c++17 -O2
+LOCAL_LDLIBS += -llog
+LOCAL_SHARED_LIBRARIES := tsi_core
+include $(BUILD_SHARED_LIBRARY)
+ANDROID_MK_TSI
+fi
+
 mkdir -p "$APP_ROOT/src/main/assets/licenses"
 cp "$AMETHYST_ROOT/LICENSE" "$APP_ROOT/src/main/assets/licenses/AMETHYST-LGPL-3.0.txt"
 

@@ -44,6 +44,18 @@ The launcher reads Android's reported physical RAM and applies a conservative Ja
 
 The lower profile avoids assigning too much of a 2 GB phone's memory to the Java heap while Android, SDL, LWJGL, graphics and audio still need RAM. Heap size is not total game memory. Very recent Minecraft versions and large modpacks may still exceed what a low-memory phone can run.
 
+## Native Rust/C++ launcher core
+
+The native migration is being introduced behind a small Android compatibility adapter so the Amethyst JVM and existing Minecraft Java client remain intact.
+
+- **Rust core** (`native/tsi-core`, built as `libtsi_core.so`): trusted-host HTTPS downloads, expected-size/SHA-1 verification, bounded ZIP extraction, instance directory operations and recursive file copying.
+- **C++ JNI bridge** (`native/cpp/tsi_jni.cpp`, built as `libtsi_jni.so`): exposes the Rust C ABI to Android.
+- **Java compatibility adapter** (`NativeBridge`): forwards Android-side calls to JNI. The launcher UI and Android lifecycle remain Java for now.
+
+The first migration pass routes Minecraft manifest and metadata downloads, client/library/asset downloads, file verification, MultiMC/Prism ZIP extraction, and instance filesystem operations through Rust. Installer orchestration, Minecraft metadata models, account handling, some instance metadata CRUD, Android JRE TAR.XZ extraction and Android lifecycle are not yet migrated. Minecraft itself still requires its compatible Java runtime.
+
+The engine workflow runs Rust unit tests, cross-compiles the Rust core for `arm64-v8a` and `armeabi-v7a`, then builds the C++ JNI layer into the playable Amethyst APK.
+
 ## Storage layout
 
 Game data is stored in app-specific external storage when available:
@@ -62,8 +74,10 @@ Each Minecraft version has its own instance directory so saves, options, mods an
 
 Requirements:
 - Android SDK Platform 36
+- Android NDK 27.3.13750724
 - JDK 21 for the engine-integrated workflow
 - Gradle 9.6.1 for the pinned Amethyst build
+- Stable Rust toolchain and `cargo-ndk` for the Rust native core
 
 The CI workflow checks out the pinned upstream Amethyst Android source, applies `scripts/integrate-amethyst-engine.sh`, then builds:
 
