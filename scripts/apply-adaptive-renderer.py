@@ -59,7 +59,7 @@ new = """        // TSI renderer policy:
             boolean isLtwMinecraftVersion = false;
             try {
                 String numericVersion = version.split("-", 2)[0];
-                String[] versionParts = numericVersion.split("\\.");
+                String[] versionParts = numericVersion.split("[.]");
                 if (versionParts.length >= 2) {
                     int majorVersion = Integer.parseInt(versionParts[0]);
                     int minorVersion = Integer.parseInt(versionParts[1]);
