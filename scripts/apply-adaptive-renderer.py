@@ -123,6 +123,7 @@ required = [
     '"opengles2"',
     '"opengles3_ltw"',
     'isLtwMinecraftVersion',
+    'numericVersion.split("[.]")',
     '"opengles_mobileglues"',
     'renderersList.rendererIds.isEmpty()',
     'No compatible Android renderer is available.',
