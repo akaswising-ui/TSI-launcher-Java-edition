@@ -32,6 +32,17 @@ public final class NativeBridge {
         nativeDownloadVerified(url, destination.getAbsolutePath(), expectedSha1, expectedSize);
     }
 
+    public static String downloadText(String url, File scratchFile) throws IOException {
+        if (scratchFile == null) throw new IllegalArgumentException("Scratch file is required.");
+        try {
+            nativeDownloadVerified(url, scratchFile.getAbsolutePath(), null, -1L);
+            byte[] bytes = java.nio.file.Files.readAllBytes(scratchFile.toPath());
+            return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        } finally {
+            if (scratchFile.exists()) scratchFile.delete();
+        }
+    }
+
     public static int extractZip(File archive, File destination,
                                  int maxEntries, long maxUncompressedBytes) throws IOException {
         if (archive == null || destination == null) {
