@@ -170,6 +170,7 @@ jobs:
 
           required = [
               "Lcom/tsi/launcher/MainActivity;",
+              "Lcom/tsi/launcher/nativecore/NativeBridge;",
               "Lcom/tsi/launcher/VirtualMachineControllerActivity;",
               "Lcom/tsi/launcher/runtime/AmethystEngineBridge;",
               "Lcom/tsi/launcher/runtime/LwjglJarSanitizer;",
