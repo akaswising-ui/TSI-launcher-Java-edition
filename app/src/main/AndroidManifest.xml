@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
@@ -24,5 +28,33 @@
         <activity android:name=".GameInstanceManagerActivity" android:exported="false" />
         <activity android:name=".ModPackManagerActivity" android:exported="false" />
         <activity android:name=".InstalledModManagerActivity" android:exported="false" />
+        <activity android:name=".StorageFileManagerActivity" android:exported="false" />
+        <activity android:name=".GameRecorderActivity" android:exported="false" />
+        <activity android:name=".GameRecordingsGalleryActivity" android:exported="false" />
+        <activity android:name=".CrashAnalyzerActivity" android:exported="false" />
+
+        <service
+            android:name=".recording.GameRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <service
+            android:name=".GameQuickToolsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled floating game quick tools overlay" />
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.tsi.launcher.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/tsi_file_paths" />
+        </provider>
     </application>
 </manifest>
