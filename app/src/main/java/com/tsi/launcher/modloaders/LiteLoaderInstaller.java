@@ -62,7 +62,7 @@ public final class LiteLoaderInstaller {
         if (!baseJson.has("minecraftArguments")) {
             throw new IOException("This Minecraft version uses a modern argument format; LiteLoader legacy profiles are not supported.");
         }
-        if (baseVersion.compareTo("1.8.9") < 0 || baseVersion.compareTo("1.12.2") > 0) {
+        if (compareVersions(baseVersion, "1.8.9") < 0 || compareVersions(baseVersion, "1.12.2") > 0) {
             throw new IOException("This TSI LiteLoader installer currently supports Minecraft 1.8.9 through 1.12.2 only.");
         }
 
@@ -103,8 +103,13 @@ public final class LiteLoaderInstaller {
         String loaderUrl = repositoryUrl + libraryPath;
 
         JSONArray libraries = new JSONArray();
-        JSONObject listedLibraries = container.optJSONObject("libraries");
-        if (listedLibraries != null) appendLibraries(libraries, listedLibraries);
+        JSONArray listedLibraries = container.optJSONArray("libraries");
+        if (listedLibraries != null) {
+            for (int index = 0; index < listedLibraries.length(); index++) {
+                JSONObject item = listedLibraries.optJSONObject(index);
+                if (item != null) libraries.put(withSecureLibraryUrl(item));
+            }
+        }
         JSONArray loaderLibraries = latest.optJSONArray("libraries");
         if (loaderLibraries != null) {
             for (int index = 0; index < loaderLibraries.length(); index++) {
@@ -182,14 +187,6 @@ public final class LiteLoaderInstaller {
             copy.put("url", secureRepositoryUrl(copy.getString("url")));
         }
         return copy;
-    }
-
-    private void appendLibraries(JSONArray result, JSONObject source) throws Exception {
-        for (java.util.Iterator<String> keys = source.keys(); keys.hasNext();) {
-            String key = keys.next();
-            Object value = source.get(key);
-            if (value instanceof JSONObject) result.put(withSecureLibraryUrl((JSONObject) value));
-        }
     }
 
     private String downloadText(String url) throws Exception {
@@ -329,6 +326,24 @@ public final class LiteLoaderInstaller {
             throw new IOException("LiteLoader library path escapes Minecraft storage.");
         }
         return target;
+    }
+
+    private static int compareVersions(String left, String right) {
+        String[] a = left.split("\\.");
+        String[] b = right.split("\\.");
+        int length = Math.max(a.length, b.length);
+        for (int index = 0; index < length; index++) {
+            int av = index < a.length ? parseNumericPart(a[index]) : 0;
+            int bv = index < b.length ? parseNumericPart(b[index]) : 0;
+            if (av != bv) return Integer.compare(av, bv);
+        }
+        return 0;
+    }
+
+    private static int parseNumericPart(String part) {
+        String digits = part.replaceAll("[^0-9].*$", "");
+        try { return digits.isEmpty() ? 0 : Integer.parseInt(digits); }
+        catch (NumberFormatException ignored) { return 0; }
     }
 
     private static String safeCoordinatePart(String value, String label) throws IOException {
