@@ -58,7 +58,7 @@ new = """        // TSI renderer policy:
             // general-purpose order and remain manually selectable in the profile editor.
             boolean isLtwMinecraftVersion = false;
             try {
-                String numericVersion = version.split("-", 2)[0];
+                String numericVersion = versionId.split("-", 2)[0];
                 String[] versionParts = numericVersion.split("[.]");
                 if (versionParts.length >= 2) {
                     int majorVersion = Integer.parseInt(versionParts[0]);
@@ -124,6 +124,7 @@ required = [
     '"opengles3_ltw"',
     'isLtwMinecraftVersion',
     'numericVersion.split("[.]")',
+    'versionId.split("-", 2)',
     '"opengles_mobileglues"',
     'renderersList.rendererIds.isEmpty()',
     'No compatible Android renderer is available.',
