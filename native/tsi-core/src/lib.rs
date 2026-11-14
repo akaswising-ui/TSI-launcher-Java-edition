@@ -345,10 +345,7 @@ fn extract_zip(
         if entry.size() > MAX_ZIP_FILE_BYTES {
             return Err(format!("ZIP entry exceeds the 1 GB per-file limit: {name}"));
         }
-        total_written = total_written
-            .checked_add(entry.size())
-            .ok_or_else(|| "ZIP expanded-size overflow".to_string())?;
-        if total_written > max_uncompressed_bytes {
+        if entry.size() > max_uncompressed_bytes.saturating_sub(total_written) {
             return Err("ZIP exceeds the configured uncompressed-size limit".into());
         }
 
@@ -472,14 +469,37 @@ fn copy_tree_inner(source: &Path, destination: &Path, root: &Path) -> Result<(),
 }
 
 fn copy_tree(source: &Path, destination: &Path) -> Result<(), String> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|e| format!("Cannot inspect copy source: {e}"))?;
+    if source_metadata.file_type().is_symlink() {
+        return Err("Refusing to copy a symbolic-link source".into());
+    }
     let source = source
         .canonicalize()
         .map_err(|e| format!("Cannot resolve copy source: {e}"))?;
-    ensure_directory(destination)?;
-    let root = destination
+    if source.is_dir() {
+        if destination.exists()
+            && fs::symlink_metadata(destination)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+        {
+            return Err("Refusing to copy into a symbolic-link destination".into());
+        }
+        ensure_directory(destination)?;
+        let root = destination
+            .canonicalize()
+            .map_err(|e| format!("Cannot resolve copy destination: {e}"))?;
+        return copy_tree_inner(&source, &root, &root);
+    }
+
+    let parent = destination
+        .parent()
+        .ok_or_else(|| "Copy destination has no parent".to_string())?;
+    ensure_directory(parent)?;
+    let root = parent
         .canonicalize()
-        .map_err(|e| format!("Cannot resolve copy destination: {e}"))?;
-    copy_tree_inner(&source, &root, &root)
+        .map_err(|e| format!("Cannot resolve copy destination folder: {e}"))?;
+    copy_tree_inner(&source, destination, &root)
 }
 
 fn delete_tree_inner(path: &Path) -> Result<(), String> {
@@ -506,6 +526,9 @@ fn delete_instance(root: &Path, id: &str) -> Result<(), String> {
     let instances_root = instances_root
         .canonicalize()
         .map_err(|e| format!("Cannot resolve instances directory: {e}"))?;
+    if !instances_root.starts_with(&root) {
+        return Err("Instances directory points outside Minecraft storage".into());
+    }
     let target = instances_root.join(id);
     let metadata = fs::symlink_metadata(&target)
         .map_err(|e| format!("Instance does not exist: {e}"))?;
@@ -677,7 +700,6 @@ pub unsafe extern "C" fn tsi_copy_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::tempdir;
     use zip::write::FileOptions;
 
