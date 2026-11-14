@@ -67,10 +67,10 @@ jobs:
 
       - name: Test and build TSI Rust core for Android
         working-directory: native/tsi-core
-        env:
-          ANDROID_NDK_HOME: ${{ github.workspace }}/${{ env.ANDROID_HOME }}/ndk/27.3.13750724
         shell: bash
         run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.3.13750724"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           cargo install cargo-ndk --locked
           cargo test
           cargo ndk -t arm64-v8a -t armeabi-v7a -o ../../native-output build --release
