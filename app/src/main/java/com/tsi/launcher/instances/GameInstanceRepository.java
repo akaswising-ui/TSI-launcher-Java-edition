@@ -2,6 +2,7 @@ package com.tsi.launcher.instances;
 
 import android.content.Context;
 import com.tsi.launcher.storage.AmethystStoragePaths;
+import com.tsi.launcher.nativecore.NativeBridge;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedOutputStream;
@@ -195,7 +196,7 @@ public final class GameInstanceRepository {
         if (!root.getPath().startsWith(base.getPath() + File.separator)) {
             throw new IOException("Refusing to delete data outside the instances folder.");
         }
-        deleteTree(root);
+        NativeBridge.deleteInstance(minecraftRoot, current.getId());
         if (id.equals(preferences.getString(ACTIVE_INSTANCE_KEY, null))) {
             List<GameInstance> remaining = list();
             if (remaining.isEmpty()) throw new IOException("No instance remains after deletion.");
@@ -252,36 +253,15 @@ public final class GameInstanceRepository {
                     throw new IOException("The archive does not contain a .minecraft or minecraft folder.");
                 }
 
-                ensureDirectory(stagedMinecraft);
-                int entriesSeen = 0;
-                long bytesWritten = 0L;
-                Enumeration<? extends ZipEntry> entries = zip.entries();
-                while (entries.hasMoreElements()) {
-                    ZipEntry entry = entries.nextElement();
-                    if (entry.isDirectory() || !entry.getName().startsWith(minecraftPrefix)) continue;
-                    entriesSeen++;
-                    if (entriesSeen > MAX_ENTRIES) throw new IOException("The archive contains too many files.");
-                    if (entry.getSize() > 1024L * 1024L * 1024L) {
-                        throw new IOException("An imported file exceeds the 1 GB per-file limit.");
-                    }
-                    String relative = safeRelative(entry.getName().substring(minecraftPrefix.length()));
-                    File target = safeChild(stagedMinecraft, relative);
-                    ensureDirectory(target.getParentFile() == null ? stagedMinecraft : target.getParentFile());
-                    try (java.io.InputStream input = zip.getInputStream(entry);
-                         FileOutputStream output = new FileOutputStream(target)) {
-                        byte[] buffer = new byte[64 * 1024];
-                        int count;
-                        while ((count = input.read(buffer)) != -1) {
-                            bytesWritten += count;
-                            if (bytesWritten > MAX_UNCOMPRESSED_BYTES) {
-                                throw new IOException("The extracted archive exceeds the 4 GB safety limit.");
-                            }
-                            output.write(buffer, 0, count);
-                        }
-                        output.getFD().sync();
-                    }
+                int entriesSeen = NativeBridge.extractZip(
+                        archive, staging, MAX_ENTRIES, MAX_UNCOMPRESSED_BYTES);
+                stagedMinecraft = new File(staging, minecraftPrefix);
+                if (!stagedMinecraft.isDirectory()) {
+                    throw new IOException("The native ZIP extractor did not produce the Minecraft game folder.");
                 }
-                if (entriesSeen == 0) throw new IOException("The instance ZIP contains no Minecraft game files.");
+                if (entriesSeen == 0) {
+                    throw new IOException("The instance ZIP contains no extractable files.");
+                }
 
                 String versionId = resolveImportedVersionId(stagedMinecraft, minecraftVersion, loader);
                 created = createInternal(instanceName, versionId, false, sharedData);
@@ -416,12 +396,11 @@ public final class GameInstanceRepository {
 
     private GameInstance createInternal(String name, String versionId, boolean pinned,
                                         boolean sharedData) throws IOException {
-        ensureDirectory(instancesRoot);
         String id = UUID.randomUUID().toString();
+        NativeBridge.ensureInstanceLayout(minecraftRoot, id, versionId);
         File folder = instanceRoot(id);
-        ensureDirectory(folder);
         File game = sharedData ? sharedDataDirectory : new File(folder, "game");
-        ensureGameFolders(game);
+        if (sharedData) ensureGameFolders(game);
         GameInstance instance = new GameInstance(id, name, versionId, versionId, pinned,
                 null, null, System.currentTimeMillis(), game, null, null, null, null, 0, sharedData);
         writeInstance(instance);
@@ -581,8 +560,9 @@ public final class GameInstanceRepository {
     }
 
     private void ensureGameFolders(File game) throws IOException {
-        String[] names = {"mods", "config", "saves", "resourcepacks", "shaderpacks", "screenshots", "logs"};
-        for (String name : names) ensureDirectory(new File(game, name));
+
+        NativeBridge.ensureGameFolders(game);
+
     }
 
     private void copyMissingTree(File source, File destination) throws IOException {
@@ -602,17 +582,9 @@ public final class GameInstanceRepository {
     }
 
     private void copyTree(File source, File destination) throws IOException {
-        if (source.isDirectory()) {
-            ensureDirectory(destination);
-            File[] children = source.listFiles();
-            if (children == null) throw new IOException("Cannot read " + source.getAbsolutePath());
-            for (File child : children) copyTree(child, new File(destination, child.getName()));
-        } else if (source.isFile()) {
-            File parent = destination.getParentFile();
-            if (parent == null) throw new IOException("Missing destination parent.");
-            ensureDirectory(parent);
-            copyFile(source, destination, false);
-        }
+
+        NativeBridge.copyTree(source, destination);
+
     }
 
     private void addTreeToZip(ZipOutputStream zip, File source, String zipRoot) throws IOException {
