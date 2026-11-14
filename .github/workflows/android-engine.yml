@@ -211,7 +211,6 @@ jobs:
               "selectedForNativeLoader",
               "POJAV_TURNIP_DIR",
               "POJAV_TURNIP_LIBRARY",
-              "QUERY_ALL_PACKAGES",
               "Lcom/tsi/launcher/instances/InstalledModManager;",
               "importJar",
               ".jar.disabled",
@@ -239,6 +238,25 @@ jobs:
               raise SystemExit("TSI Java application code is missing from the APK DEX: " + ", ".join(missing))
           print("Verified TSI Java activities and Amethyst engine bridge in APK DEX.")
           PY
+
+      - name: Verify TSI runtime and privacy permissions in APK manifest
+        shell: bash
+        run: |
+          APK=".build/Amethyst-Android/app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          PERMISSIONS="$("$AAPT" dump permissions "$APK")"
+          for permission in \
+            android.permission.QUERY_ALL_PACKAGES \
+            android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION \
+            android.permission.FOREGROUND_SERVICE_SPECIAL_USE \
+            android.permission.SYSTEM_ALERT_WINDOW; do
+            if ! grep -Fq "$permission" <<< "$PERMISSIONS"; then
+              echo "Required TSI permission missing from APK manifest: $permission"
+              exit 1
+            fi
+          done
+          echo "Verified TSI renderer discovery, recorder and floating overlay permissions."
 
       - name: Stage TSI engine APK
         shell: bash
