@@ -57,7 +57,7 @@ The following tools have now been added to the TSI branch. They are TSI implemen
 | Custom instance images | Pick a local image, preview it on the instance card, reset to default | Stored in TSI app-private data by instance ID; not included in exported instance ZIPs |
 | Quick-settings / game overlay | User-enabled floating TSI shortcut bubble with recorder, gallery, file manager, crash analyzer, Vulkan packages and engine settings | This is a shortcut panel, not a clone of Hyper's full side-drawer quick controls. Android Display over other apps and foreground-service notices apply |
 | Gemini crash analyzer | Local log heuristics plus optional Gemini API analysis, encrypted API key in Android Keystore-backed storage, explicit checkbox consent before upload | The user must supply a Gemini API key and approve sending the displayed diagnostics. No automatic log upload |
-| LiteLoader | Not implemented | LiteLoader is not included in the pinned Amethyst installer flow. Hyper's README labels it experimental, but the inspected source did not provide a compatible installer flow to port safely |
+| LiteLoader | Experimental dedicated installer reads the official LiteLoader manifest, downloads HTTPS Maven (m2) artifacts and dependencies, writes an inherited child version JSON and switches the selected instance to it | Supported for compatible manifest entries on Minecraft 1.8.9–1.12.2; Ivy-only versions and non-HTTPS repositories are rejected. The LiteLoader service itself is legacy and may not work with every modpack |
 
 ## Remaining compatibility boundaries
 
@@ -65,6 +65,6 @@ The following tools have now been added to the TSI branch. They are TSI implemen
 - Hyper's private MojoExec backend and Horizon/Rust engine are separate game runtimes. TSI Java Edition continues to use the pinned Amethyst Java engine.
 - Hyper Renderer V2 plugin packages and its custom Vulkan `qgl_config` override are not implemented. The legacy FCL/Zalith plugin metadata and Turnip driver loader paths described above are supported only where the pinned Amethyst native runtime can consume them.
 - Hyper-private JRE and control-map file paths are not copied. TSI uses its own installed Android JREs and control maps.
-- LiteLoader remains unavailable until a compatible installer and profile integration are added.
+- LiteLoader is experimental and limited to the official manifest's HTTPS Maven (m2) entries for Minecraft 1.8.9–1.12.2. Ivy-only metadata and non-HTTPS repositories are rejected; this does not imply compatibility with every legacy mod or phone.
 
 The engine-integrated build must pass before an APK is published. CI verifies compilation and packaging, not physical-phone recording, native driver loading, renderer stability, Gemini API behavior or Minecraft gameplay. A device smoke test is still required for those behaviors.
