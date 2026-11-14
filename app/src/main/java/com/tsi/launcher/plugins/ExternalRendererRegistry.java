@@ -40,6 +40,23 @@ public final class ExternalRendererRegistry {
         return info == null ? rendererId : info.displayName;
     }
 
+    public static String getRendererCompatibilitySummary(Context context, String rendererId) {
+        RendererPluginInfo info = get(context, rendererId);
+        if (info == null) return "Plugin is no longer installed";
+        String range;
+        if ((info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty())
+                && (info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty())) {
+            range = "Minecraft range not declared";
+        } else {
+            String minimum = info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty()
+                    ? "any" : info.minMinecraftVersion;
+            String maximum = info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty()
+                    ? "any" : info.maxMinecraftVersion;
+            range = "Minecraft " + minimum + " to " + maximum;
+        }
+        return "Native renderer: " + info.nativeRendererId + " • " + range;
+    }
+
     public static boolean isExternalRenderer(Context context, String rendererId) {
         return rendererId != null && rendererId.startsWith(ID_PREFIX) && get(context, rendererId) != null;
     }
