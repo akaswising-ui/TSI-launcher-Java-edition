@@ -119,7 +119,8 @@ public final class ExternalRendererRegistry {
         }
 
         for (ApplicationInfo app : applications) {
-            if (app == null || app.packageName == null || app.nativeLibraryDir == null) continue;
+            if (app == null || app.packageName == null || app.nativeLibraryDir == null ||
+                    (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
             Bundle metadata = app.metaData;
             if (metadata == null) continue;
             if (!metadata.getBoolean("fclPlugin", false) &&
@@ -141,12 +142,19 @@ public final class ExternalRendererRegistry {
         String[] renderer = declaration.split(":", -1);
         if (renderer.length < 2 || renderer.length > 3) return null;
 
-        String glLibrary = safeLibraryName(renderer[1]);
-        String eglLibrary = renderer.length > 2 && !renderer[2].trim().isEmpty()
-                ? safeLibraryName(renderer[2]) : "libEGL.so";
+        String glLibrary = safeLibraryName(new File(renderer[1]).getName());
+        String eglDeclared = renderer.length > 2 && !renderer[2].trim().isEmpty()
+                ? renderer[2].trim() : "libEGL.so";
+        String eglLibrary = safeLibraryName(new File(eglDeclared).getName());
         File nativeRoot = new File(app.nativeLibraryDir).getCanonicalFile();
         File mainLibrary = new File(nativeRoot, glLibrary).getCanonicalFile();
         if (!nativeRoot.equals(mainLibrary.getParentFile()) || !mainLibrary.isFile()) return null;
+        File bundledEgl = new File(nativeRoot, eglLibrary).getCanonicalFile();
+        if (!nativeRoot.equals(bundledEgl.getParentFile()) || !bundledEgl.isFile()) {
+            eglLibrary = "libEGL.so";
+        } else {
+            eglLibrary = bundledEgl.getAbsolutePath();
+        }
 
         String packageName = app.packageName;
         if (!packageName.matches("[A-Za-z0-9_.]{1,68}")) return null;
@@ -185,11 +193,8 @@ public final class ExternalRendererRegistry {
 
         // Hyper/FCL conventions permit the EGL library to be supplied either by
         // the plugin package or by the system. Don't reject a system EGL name.
-        if (!eglLibrary.startsWith("/")) {
-            File egl = new File(nativeRoot, eglLibrary).getCanonicalFile();
-            if (egl.getParentFile().equals(nativeRoot) && egl.isFile()) {
-                eglLibrary = egl.getAbsolutePath();
-            }
+        if (eglLibrary.startsWith("/")) {
+            environment.put("POJAVEXEC_EGL", eglLibrary);
         }
         return new RendererPluginInfo(packageName, id, display.trim(), min, max,
                 glLibrary, eglLibrary, nativeRoot.getAbsolutePath(), environment, dlopen);
