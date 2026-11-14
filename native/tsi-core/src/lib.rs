@@ -569,8 +569,8 @@ where
 #[no_mangle]
 pub unsafe extern "C" fn tsi_sha1_matches(path: *const c_char, expected: *const c_char) -> c_int {
     let result = (|| {
-        let path = Path::new(string_arg(path, "File path")?);
-        let expected = string_arg(expected, "Expected SHA-1")?;
+        let path = Path::new(unsafe { string_arg(path, "File path") }?);
+        let expected = unsafe { string_arg(expected, "Expected SHA-1") }?;
         if expected.len() != 40 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err("Expected SHA-1 must contain 40 hexadecimal characters".into());
         }
@@ -592,11 +592,11 @@ pub unsafe extern "C" fn tsi_is_verified_file(
     expected_size: c_longlong,
 ) -> c_int {
     let result = (|| {
-        let path = Path::new(string_arg(path, "File path")?);
+        let path = Path::new(unsafe { string_arg(path, "File path") }?);
         let expected = if expected.is_null() {
             None
         } else {
-            let value = string_arg(expected, "Expected SHA-1")?;
+            let value = unsafe { string_arg(expected, "Expected SHA-1") }?;
             if value.is_empty() { None } else { Some(value) }
         };
         Ok(if verified_file(path, expected, expected_size) { 1 } else { 0 })
@@ -618,12 +618,12 @@ pub unsafe extern "C" fn tsi_download_verified(
     expected_size: c_longlong,
 ) -> c_int {
     ffi_result(|| {
-        let url = string_arg(url, "Download URL")?;
-        let destination = Path::new(string_arg(destination, "Download destination")?);
+        let url = unsafe { string_arg(url, "Download URL") }?;
+        let destination = Path::new(unsafe { string_arg(destination, "Download destination") }?);
         let expected = if expected.is_null() {
             None
         } else {
-            let value = string_arg(expected, "Expected SHA-1")?;
+            let value = unsafe { string_arg(expected, "Expected SHA-1") }?;
             if value.is_empty() { None } else { Some(value) }
         };
         download_verified(url, destination, expected, expected_size)
@@ -638,8 +638,8 @@ pub unsafe extern "C" fn tsi_extract_zip(
     max_bytes: c_longlong,
 ) -> c_int {
     let result = (|| {
-        let archive = Path::new(string_arg(archive, "ZIP archive path")?);
-        let destination = Path::new(string_arg(destination, "ZIP destination")?);
+        let archive = Path::new(unsafe { string_arg(archive, "ZIP archive path") }?);
+        let destination = Path::new(unsafe { string_arg(destination, "ZIP destination") }?);
         if max_entries <= 0 || max_bytes <= 0 {
             return Err("ZIP safety limits must be positive".into());
         }
@@ -656,7 +656,7 @@ pub unsafe extern "C" fn tsi_extract_zip(
 
 #[no_mangle]
 pub unsafe extern "C" fn tsi_ensure_game_folders(game: *const c_char) -> c_int {
-    ffi_result(|| ensure_game_folders(Path::new(string_arg(game, "Game directory")?)))
+    ffi_result(|| ensure_game_folders(Path::new(unsafe { string_arg(game, "Game directory") }?)))
 }
 
 #[no_mangle]
@@ -666,9 +666,9 @@ pub unsafe extern "C" fn tsi_ensure_instance_layout(
     version: *const c_char,
 ) -> c_int {
     ffi_result(|| {
-        let root = Path::new(string_arg(root, "Minecraft root")?);
-        let id = string_arg(id, "Instance ID")?;
-        let version = string_arg(version, "Minecraft version ID")?;
+        let root = Path::new(unsafe { string_arg(root, "Minecraft root") }?);
+        let id = unsafe { string_arg(id, "Instance ID") }?;
+        let version = unsafe { string_arg(version, "Minecraft version ID") }?;
         ensure_instance_layout(root, id, version)
     })
 }
@@ -679,8 +679,8 @@ pub unsafe extern "C" fn tsi_delete_instance(
     id: *const c_char,
 ) -> c_int {
     ffi_result(|| {
-        let root = Path::new(string_arg(root, "Minecraft root")?);
-        let id = string_arg(id, "Instance ID")?;
+        let root = Path::new(unsafe { string_arg(root, "Minecraft root") }?);
+        let id = unsafe { string_arg(id, "Instance ID") }?;
         delete_instance(root, id)
     })
 }
@@ -691,8 +691,8 @@ pub unsafe extern "C" fn tsi_copy_tree(
     destination: *const c_char,
 ) -> c_int {
     ffi_result(|| {
-        let source = Path::new(string_arg(source, "Copy source")?);
-        let destination = Path::new(string_arg(destination, "Copy destination")?);
+        let source = Path::new(unsafe { string_arg(source, "Copy source") }?);
+        let destination = Path::new(unsafe { string_arg(destination, "Copy destination") }?);
         copy_tree(source, destination)
     })
 }
