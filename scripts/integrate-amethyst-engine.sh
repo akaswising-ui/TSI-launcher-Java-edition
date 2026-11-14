@@ -103,7 +103,7 @@ java_dependencies = (
     dependency_marker + "\n\n"
     "    // Amethyst's ExagearApacheCommons.jar already provides Commons Compress and Commons IO.\n"
     "    // Do not add a second copy of those packages to the engine APK.\n"
-    '    implementation "org.tukaani:xz:1.10"' + "\\n" +
+    '    implementation "org.tukaani:xz:1.10"' + "\n" +
     '    implementation "androidx.documentfile:documentfile:1.0.1"'
 )
 text = replace_once(text, dependency_marker, java_dependencies, "TSI Java dependency insertion")
