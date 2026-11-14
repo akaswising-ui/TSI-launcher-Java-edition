@@ -206,6 +206,153 @@ public final class GameInstanceRepository {
         return active == null ? null : active.getId();
     }
 
+    /**
+     * Imports ZIP, MultiMC/Prism, native Hyper ZIP, or 7z instance archives.
+     * 7z is streamed into a bounded temporary ZIP so the existing hardened
+     * importer remains the single path for validation and installation.
+     */
+    public synchronized GameInstance importArchive(File archive) throws IOException {
+        if (!archive.isFile() || archive.length() <= 0L) {
+            throw new IOException("The selected instance archive is empty.");
+        }
+        if (!isSevenZipArchive(archive)) return importMultiMc(archive);
+
+        File converted = new File(appContext.getCacheDir(),
+                "tsi-7z-import-" + UUID.randomUUID() + ".zip");
+        try {
+            convertSevenZipToZip(archive, converted);
+            return importMultiMc(converted);
+        } finally {
+            if (converted.exists() && !converted.delete()) {
+                converted.deleteOnExit();
+            }
+        }
+    }
+
+    private static boolean isSevenZipArchive(File archive) throws IOException {
+        byte[] signature = new byte[6];
+        try (FileInputStream input = new FileInputStream(archive)) {
+            int count = input.read(signature);
+            return count == 6
+                    && (signature[0] & 0xff) == 0x37
+                    && (signature[1] & 0xff) == 0x7a
+                    && (signature[2] & 0xff) == 0xbc
+                    && (signature[3] & 0xff) == 0xaf
+                    && (signature[4] & 0xff) == 0x27
+                    && (signature[5] & 0xff) == 0x1c;
+        }
+    }
+
+    private static void convertSevenZipToZip(File source, File destination) throws IOException {
+        Object sevenZip = null;
+        try {
+            Class<?> sevenZipClass = Class.forName(
+                    "org.apache.commons.compress.archivers.sevenz.SevenZFile");
+            Class<?> entryClass = Class.forName(
+                    "org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry");
+
+            Object builder = sevenZipClass.getMethod("builder").invoke(null);
+            Class<?> builderClass = builder.getClass();
+            builder = builderClass.getMethod("setFile", File.class).invoke(builder, source);
+            java.lang.reflect.Method memoryLimit = null;
+            for (java.lang.reflect.Method candidate : builderClass.getMethods()) {
+                if ("setMaxMemoryLimitKiB".equals(candidate.getName())
+                        && candidate.getParameterTypes().length == 1) {
+                    memoryLimit = candidate;
+                    break;
+                }
+            }
+            if (memoryLimit == null) {
+                throw new IOException("The bundled 7z library cannot enforce a decoder memory limit.");
+            }
+            Class<?> memoryType = memoryLimit.getParameterTypes()[0];
+            Object memoryValue = memoryType == int.class || memoryType == Integer.class
+                    ? Integer.valueOf(128 * 1024) : Long.valueOf(128L * 1024L);
+            builder = memoryLimit.invoke(builder, memoryValue);
+            sevenZip = builderClass.getMethod("get").invoke(builder);
+
+            java.lang.reflect.Method nextEntry = sevenZipClass.getMethod("getNextEntry");
+            java.lang.reflect.Method getInputStream = sevenZipClass.getMethod("getInputStream", entryClass);
+            java.lang.reflect.Method close = sevenZipClass.getMethod("close");
+            java.lang.reflect.Method entryName = entryClass.getMethod("getName");
+            java.lang.reflect.Method entryIsDirectory = entryClass.getMethod("isDirectory");
+            java.lang.reflect.Method entrySize = entryClass.getMethod("getSize");
+
+            ensureParentDirectory(destination);
+            long totalBytes = 0L;
+            int entryCount = 0;
+            try (ZipOutputStream zip = new ZipOutputStream(
+                    new BufferedOutputStream(new FileOutputStream(destination)))) {
+                zip.setLevel(java.util.zip.Deflater.BEST_SPEED);
+                while (true) {
+                    Object entry = nextEntry.invoke(sevenZip);
+                    if (entry == null) break;
+                    entryCount++;
+                    if (entryCount > MAX_ENTRIES) {
+                        throw new IOException("The 7z archive contains too many files.");
+                    }
+                    String name = String.valueOf(entryName.invoke(entry));
+                    if (name == null || name.trim().isEmpty()) {
+                        throw new IOException("The 7z archive contains an empty file path.");
+                    }
+                    boolean directory = Boolean.TRUE.equals(entryIsDirectory.invoke(entry));
+                    long declaredSize = ((Number) entrySize.invoke(entry)).longValue();
+                    if (declaredSize > 1024L * 1024L * 1024L) {
+                        throw new IOException("A 7z entry exceeds the 1 GB per-file import limit.");
+                    }
+                    ZipEntry zipEntry = new ZipEntry(name);
+                    zip.putNextEntry(zipEntry);
+                    if (!directory) {
+                        try (java.io.InputStream input =
+                                     (java.io.InputStream) getInputStream.invoke(sevenZip, entry)) {
+                            byte[] buffer = new byte[64 * 1024];
+                            long fileBytes = 0L;
+                            int count;
+                            while ((count = input.read(buffer)) != -1) {
+                                fileBytes += count;
+                                totalBytes += count;
+                                if (fileBytes > 1024L * 1024L * 1024L) {
+                                    throw new IOException("A 7z entry exceeded the 1 GB per-file import limit.");
+                                }
+                                if (totalBytes > MAX_UNCOMPRESSED_BYTES) {
+                                    throw new IOException("The 7z archive exceeds the 4 GB extraction safety limit.");
+                                }
+                                zip.write(buffer, 0, count);
+                            }
+                            if (declaredSize >= 0L && declaredSize != fileBytes) {
+                                throw new IOException("A 7z entry has an inconsistent uncompressed size.");
+                            }
+                        }
+                    }
+                    zip.closeEntry();
+                }
+            }
+            if (entryCount == 0) throw new IOException("The 7z archive contains no files.");
+        } catch (ClassNotFoundException error) {
+            throw new IOException("7z import is unavailable because the bundled Commons Compress library is missing.", error);
+        } catch (java.lang.reflect.InvocationTargetException error) {
+            Throwable cause = error.getCause() == null ? error : error.getCause();
+            throw new IOException("Could not safely read the selected 7z archive: " + cause.getMessage(), cause);
+        } catch (ReflectiveOperationException error) {
+            throw new IOException("The bundled 7z reader is incompatible with this build.", error);
+        } finally {
+            if (sevenZip != null) {
+                try {
+                    sevenZip.getClass().getMethod("close").invoke(sevenZip);
+                } catch (Exception ignored) {
+                }
+            }
+            if (destination.exists() && destination.length() == 0L) destination.delete();
+        }
+    }
+
+    private static void ensureParentDirectory(File file) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
+            throw new IOException("Could not create temporary archive directory.");
+        }
+    }
+
     /** Import a MultiMC/Prism instance with path traversal and size protections. */
     public synchronized GameInstance importMultiMc(File archive) throws IOException {
         if (!archive.isFile() || archive.length() <= 0L) throw new IOException("The selected ZIP is empty.");
