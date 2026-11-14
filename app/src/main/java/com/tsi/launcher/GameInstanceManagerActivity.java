@@ -6,8 +6,11 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -152,7 +155,77 @@ public final class GameInstanceManagerActivity extends Activity {
             row2.addView(export, new LinearLayout.LayoutParams(0, dp(44), 1f));
             row2.addView(delete, new LinearLayout.LayoutParams(0, dp(44), 1f));
             card.addView(row2, matchWrap());
+
+            Button configure = button("INSTANCE SETTINGS");
+            configure.setOnClickListener(v -> showSettingsDialog(instance));
+            card.addView(configure, matchWrap());
         }
+    }
+
+    private void showSettingsDialog(GameInstance instance) {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setPadding(dp(8), dp(4), dp(8), dp(4));
+        fields.setOrientation(LinearLayout.VERTICAL);
+
+        EditText renderer = new EditText(this);
+        renderer.setSingleLine(true);
+        renderer.setHint("Renderer ID (blank = automatic)");
+        renderer.setText(instance.getRendererId() == null ? "" : instance.getRendererId());
+        fields.addView(renderer, matchWrap());
+
+        EditText runtime = new EditText(this);
+        runtime.setSingleLine(true);
+        runtime.setHint("Runtime: Auto or installed runtime name");
+        String runtimeName = instance.getSelectedRuntime();
+        if (runtimeName != null && runtimeName.startsWith("Name:")) runtimeName = runtimeName.substring(5);
+        runtime.setText(runtimeName == null ? "Auto" : runtimeName);
+        fields.addView(runtime, matchWrap());
+
+        EditText javaArgs = new EditText(this);
+        javaArgs.setSingleLine(false);
+        javaArgs.setMinLines(2);
+        javaArgs.setMaxLines(4);
+        javaArgs.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        javaArgs.setHint("Custom JVM arguments (optional)");
+        javaArgs.setText(instance.getJavaArgs() == null ? "" : instance.getJavaArgs());
+        fields.addView(javaArgs, matchWrap());
+
+        EditText controls = new EditText(this);
+        controls.setSingleLine(true);
+        controls.setHint("Control layout name (blank = default)");
+        controls.setText(instance.getControlLayout() == null ? "" : instance.getControlLayout());
+        fields.addView(controls, matchWrap());
+
+        Spinner argsMode = new Spinner(this);
+        argsMode.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"Argument mode 0", "Argument mode 1", "Argument mode 2"}));
+        argsMode.setSelection(Math.max(0, Math.min(2, instance.getArgsMode())));
+        fields.addView(argsMode, matchWrap());
+
+        CheckBox sharedData = new CheckBox(this);
+        sharedData.setText("Use shared game data folder");
+        sharedData.setChecked(instance.isSharedData());
+        fields.addView(sharedData, matchWrap());
+
+        new AlertDialog.Builder(this)
+                .setTitle("Configure " + instance.getName())
+                .setMessage("Use only renderer IDs and runtime names installed on this device. Invalid choices can stop Minecraft from launching.")
+                .setView(fields)
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("SAVE", (dialog, which) -> runOperation("Saving instance settings…", () -> {
+                    String runtimeValue = runtime.getText().toString().trim();
+                    if ("Auto".equalsIgnoreCase(runtimeValue)) runtimeValue = null;
+                    repository.updateLaunchSettings(instance.getId(),
+                            renderer.getText().toString(),
+                            javaArgs.getText().toString(),
+                            runtimeValue,
+                            controls.getText().toString(),
+                            argsMode.getSelectedItemPosition(),
+                            sharedData.isChecked());
+                    return "Saved launch settings for " + instance.getName() + ".";
+                })).show();
     }
 
     private void showCreateDialog() {
