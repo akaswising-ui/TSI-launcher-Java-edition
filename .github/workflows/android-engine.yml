@@ -75,6 +75,9 @@ jobs:
       - name: Apply installed FCL renderer APK support
         run: python3 scripts/apply-fcl-renderer-plugins.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
+      - name: Apply custom Adreno Turnip driver packages
+        run: python3 scripts/apply-adreno-driver-packages.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
       - name: Generate Amethyst language list
         working-directory: .build/Amethyst-Android
         run: bash scripts/languagelist_updater.sh
@@ -203,6 +206,11 @@ jobs:
               "Lcom/tsi/launcher/plugins/ExternalRendererRegistry;",
               "getPreparedGraphicsLibrary",
               "tsi.fcl.",
+              "Lcom/tsi/launcher/VulkanDriverManagerActivity;",
+              "Lcom/tsi/launcher/vulkan/AdrenoDriverPackageManager;",
+              "selectedForNativeLoader",
+              "POJAV_TURNIP_DIR",
+              "POJAV_TURNIP_LIBRARY",
               "QUERY_ALL_PACKAGES",
               "Lcom/tsi/launcher/instances/InstalledModManager;",
               "importJar",
