@@ -266,8 +266,14 @@ public final class GameInstanceRepository {
                 throw new IOException("The bundled 7z library cannot enforce a decoder memory limit.");
             }
             Class<?> memoryType = memoryLimit.getParameterTypes()[0];
-            Object memoryValue = memoryType == int.class || memoryType == Integer.class
-                    ? Integer.valueOf(128 * 1024) : Long.valueOf(128L * 1024L);
+            final Object memoryValue;
+            if (memoryType == int.class || memoryType == Integer.class) {
+                memoryValue = Integer.valueOf(128 * 1024);
+            } else if (memoryType == long.class || memoryType == Long.class) {
+                memoryValue = Long.valueOf(128L * 1024L);
+            } else {
+                throw new IOException("The bundled 7z reader has an unsupported memory-limit type.");
+            }
             builder = memoryLimit.invoke(builder, memoryValue);
             sevenZip = builderClass.getMethod("get").invoke(builder);
 
