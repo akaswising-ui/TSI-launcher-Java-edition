@@ -1306,8 +1306,8 @@ cp -a "$TSI_JAVA_ROOT/." "$APP_ROOT/src/main/java/com/tsi/launcher/"
 TSI_NATIVE_OUTPUT="$TSI_ROOT/native-output"
 for abi in arm64-v8a armeabi-v7a; do
     test -s "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so"
-    mkdir -p "$APP_ROOT/src/main/jniLibs/$abi"
-    cp "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so" "$APP_ROOT/src/main/jniLibs/$abi/libtsi_core.so"
+    mkdir -p "$APP_ROOT/src/main/prebuilt/$abi"
+    cp "$TSI_NATIVE_OUTPUT/$abi/libtsi_core.so" "$APP_ROOT/src/main/prebuilt/$abi/libtsi_core.so"
 done
 cp "$TSI_ROOT/native/cpp/tsi_jni.cpp" "$APP_ROOT/src/main/jni/tsi_jni.cpp"
 
@@ -1320,7 +1320,7 @@ cat >> "$ANDROID_MK" <<'ANDROID_MK_TSI'
 LOCAL_PATH := $(HERE_PATH)
 include $(CLEAR_VARS)
 LOCAL_MODULE := tsi_core
-LOCAL_SRC_FILES := ../jniLibs/$(TARGET_ARCH_ABI)/libtsi_core.so
+LOCAL_SRC_FILES := ../prebuilt/$(TARGET_ARCH_ABI)/libtsi_core.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
