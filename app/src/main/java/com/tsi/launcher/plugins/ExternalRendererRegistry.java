@@ -51,8 +51,17 @@ public final class ExternalRendererRegistry {
     }
 
     public static RendererPluginInfo prepare(Context context, String rendererId) throws Exception {
+        return prepare(context, rendererId, null);
+    }
+
+    public static RendererPluginInfo prepare(Context context, String rendererId,
+                                              String minecraftVersion) throws Exception {
         RendererPluginInfo info = get(context, rendererId);
         if (info == null) throw new IllegalArgumentException("External renderer plugin is no longer installed or compatible.");
+        if (minecraftVersion != null && !supportsMinecraftVersion(info, minecraftVersion)) {
+            throw new IllegalArgumentException("Renderer " + info.displayName
+                    + " does not support Minecraft " + minecraftVersion + ".");
+        }
         // Revalidate the package at the point of use. A removed or updated plugin
         // must not leave a stale path in the native renderer launch.
         ApplicationInfo current = getApplicationInfo(context, info.packageName);
@@ -72,9 +81,10 @@ public final class ExternalRendererRegistry {
             }
             dlopen.add(extra.getAbsolutePath());
         }
-        RendererPluginInfo prepared = new RendererPluginInfo(info.packageName, info.rendererId, info.displayName,
-                info.minMinecraftVersion, info.maxMinecraftVersion, info.glLibraryName,
-                info.eglLibraryName, nativeRoot.getAbsolutePath(), info.environment, dlopen);
+        RendererPluginInfo prepared = new RendererPluginInfo(info.packageName, info.rendererId,
+                info.nativeRendererId, info.displayName, info.minMinecraftVersion,
+                info.maxMinecraftVersion, info.glLibraryName, info.eglLibraryName,
+                nativeRoot.getAbsolutePath(), info.environment, dlopen);
         PREPARED.put(rendererId, prepared);
         return prepared;
     }
@@ -142,6 +152,10 @@ public final class ExternalRendererRegistry {
         String[] renderer = declaration.split(":", -1);
         if (renderer.length < 2 || renderer.length > 3) return null;
 
+        String nativeRendererId = renderer[0].trim();
+        if (!nativeRendererId.matches("[A-Za-z0-9._+.-]{1,120}")) {
+            throw new IllegalArgumentException("Invalid native renderer ID in plugin metadata.");
+        }
         String glLibrary = safeLibraryName(new File(renderer[1]).getName());
         String eglDeclared = renderer.length > 2 && !renderer[2].trim().isEmpty()
                 ? renderer[2].trim() : "libEGL.so";
@@ -172,7 +186,12 @@ public final class ExternalRendererRegistry {
                 String value = item.substring(equals + 1).trim();
                 if (!key.matches("[A-Za-z_][A-Za-z0-9_]{0,63}") ||
                         value.length() > 1024 || value.contains("\n") || value.contains("\r")) continue;
-                if ("DLOPEN".equals(key)) {
+                if ("POJAV_RENDERER".equals(key)) {
+                    if (!value.matches("[A-Za-z0-9._+.-]{1,120}")) {
+                        throw new IllegalArgumentException("Invalid POJAV_RENDERER value in plugin metadata.");
+                    }
+                    nativeRendererId = value;
+                } else if ("DLOPEN".equals(key)) {
                     for (String extra : value.split(",")) {
                         String safe = safeLibraryName(extra.trim());
                         if (!dlopen.contains(safe)) dlopen.add(safe);
@@ -196,8 +215,46 @@ public final class ExternalRendererRegistry {
         if (eglLibrary.startsWith("/")) {
             environment.put("POJAVEXEC_EGL", eglLibrary);
         }
-        return new RendererPluginInfo(packageName, id, display.trim(), min, max,
-                glLibrary, eglLibrary, nativeRoot.getAbsolutePath(), environment, dlopen);
+        return new RendererPluginInfo(packageName, id, nativeRendererId, display.trim(),
+                min, max, glLibrary, eglLibrary, nativeRoot.getAbsolutePath(),
+                environment, dlopen);
+    }
+
+    static boolean supportsMinecraftVersion(RendererPluginInfo info, String minecraftVersion) {
+        if (info == null) return false;
+        if ((info.minMinecraftVersion == null || info.minMinecraftVersion.trim().isEmpty())
+                && (info.maxMinecraftVersion == null || info.maxMinecraftVersion.trim().isEmpty())) {
+            return true;
+        }
+        String current = numericRelease(minecraftVersion);
+        if (current == null) return false;
+        if (info.minMinecraftVersion != null && !info.minMinecraftVersion.trim().isEmpty()) {
+            String minimum = numericRelease(info.minMinecraftVersion);
+            if (minimum == null || compareNumericVersions(current, minimum) < 0) return false;
+        }
+        if (info.maxMinecraftVersion != null && !info.maxMinecraftVersion.trim().isEmpty()) {
+            String maximum = numericRelease(info.maxMinecraftVersion);
+            if (maximum == null || compareNumericVersions(current, maximum) > 0) return false;
+        }
+        return true;
+    }
+
+    static int compareNumericVersions(String left, String right) {
+        String[] a = left.split("\\.");
+        String[] b = right.split("\\.");
+        int length = Math.max(a.length, b.length);
+        for (int i = 0; i < length; i++) {
+            int av = i < a.length ? Integer.parseInt(a[i]) : 0;
+            int bv = i < b.length ? Integer.parseInt(b[i]) : 0;
+            if (av != bv) return Integer.compare(av, bv);
+        }
+        return 0;
+    }
+
+    private static String numericRelease(String value) {
+        if (value == null) return null;
+        String release = value.trim().split("-", 2)[0];
+        return release.matches("[0-9]{1,3}(?:\\.[0-9]{1,3}){1,3}") ? release : null;
     }
 
     private static String safeLibraryName(String value) throws Exception {
@@ -233,6 +290,7 @@ public final class ExternalRendererRegistry {
     public static final class RendererPluginInfo {
         public final String packageName;
         public final String rendererId;
+        public final String nativeRendererId;
         public final String displayName;
         public final String minMinecraftVersion;
         public final String maxMinecraftVersion;
@@ -242,12 +300,13 @@ public final class ExternalRendererRegistry {
         public final Map<String, String> environment;
         public final List<String> dlopenLibraries;
 
-        RendererPluginInfo(String packageName, String rendererId, String displayName,
-                           String minMinecraftVersion, String maxMinecraftVersion,
+        RendererPluginInfo(String packageName, String rendererId, String nativeRendererId,
+                           String displayName, String minMinecraftVersion, String maxMinecraftVersion,
                            String glLibraryName, String eglLibraryName, String nativeLibraryDirectory,
                            Map<String, String> environment, List<String> dlopenLibraries) {
             this.packageName = packageName;
             this.rendererId = rendererId;
+            this.nativeRendererId = nativeRendererId;
             this.displayName = displayName;
             this.minMinecraftVersion = minMinecraftVersion;
             this.maxMinecraftVersion = maxMinecraftVersion;
