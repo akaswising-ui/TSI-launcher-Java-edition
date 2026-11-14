@@ -209,6 +209,16 @@ public final class GameInstanceRepository {
     /** Import a MultiMC/Prism instance with path traversal and size protections. */
     public synchronized GameInstance importMultiMc(File archive) throws IOException {
         if (!archive.isFile() || archive.length() <= 0L) throw new IOException("The selected ZIP is empty.");
+        // Hyper Launcher can supply either a MultiMC-compatible export or a ZIP
+        // of its native instance folder containing hyper_instance.json.
+        try (ZipFile probe = new ZipFile(archive)) {
+            if (findEntry(probe, "instance.cfg") == null) {
+                ZipEntry hyperMetadata = findEntry(probe, "hyper_instance.json");
+                if (hyperMetadata != null) {
+                    return importHyperInstanceArchive(archive, hyperMetadata.getName());
+                }
+            }
+        }
         File staging = new File(appContext.getCacheDir(), "tsi-mmc-import-" + UUID.randomUUID());
         File stagedMinecraft = new File(staging, ".minecraft");
         GameInstance created = null;
@@ -308,6 +318,208 @@ public final class GameInstanceRepository {
         } finally {
             try { deleteTree(staging); } catch (Exception ignored) { }
         }
+    }
+
+
+    /**
+     * Import a ZIP made from a Hyper Launcher instance folder. Hyper's native
+     * instance format stores hyper_instance.json beside mods/config/saves.
+     * Shared game assets are kept in TSI's shared .minecraft root; player data
+     * is copied into a new isolated TSI instance.
+     */
+    private GameInstance importHyperInstanceArchive(File archive, String metadataPath) throws IOException {
+        File staging = new File(appContext.getCacheDir(), "tsi-hyper-import-" + UUID.randomUUID());
+        File stagedMinecraft = new File(staging, ".minecraft");
+        GameInstance created = null;
+        try {
+            ensureDirectory(stagedMinecraft);
+            try (ZipFile zip = new ZipFile(archive)) {
+                ZipEntry metadataEntry = zip.getEntry(metadataPath);
+                if (metadataEntry == null || metadataEntry.isDirectory()) {
+                    throw new IOException("The Hyper instance metadata file could not be read.");
+                }
+                String metadataText = readZipEntry(zip, metadataEntry, 1024L * 1024L);
+                JSONObject metadata = new JSONObject(metadataText);
+
+                String versionId = nonBlank(metadata.optString("versionId"));
+                if (versionId == null || "latest_release".equals(versionId) ||
+                        "latest_snapshot".equals(versionId)) {
+                    throw new IOException(
+                            "This Hyper instance uses a moving Minecraft version alias. " +
+                            "Select a concrete Minecraft version in Hyper Launcher and export it again.");
+                }
+                requireSafeVersion(versionId);
+
+                String baseMinecraftVersion = resolveHyperMinecraftVersion(stagedMinecraft, versionId);
+                requireSafeVersion(baseMinecraftVersion);
+
+                String rawName = nonBlank(metadata.optString("name"));
+                if (rawName == null) {
+                    String archiveName = archive.getName();
+                    int dot = archiveName.lastIndexOf('.');
+                    rawName = dot > 0 ? archiveName.substring(0, dot) : archiveName;
+                }
+                String instanceName = validateName(rawName);
+
+                String prefixPart = metadataPath.contains("/")
+                        ? metadataPath.substring(0, metadataPath.lastIndexOf('/')) : "";
+                String prefix = prefixPart.isEmpty() ? "" : prefixPart + "/";
+                int entriesSeen = 0;
+                long bytesWritten = 0L;
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory() || !entry.getName().startsWith(prefix)) continue;
+
+                    String relative = entry.getName().substring(prefix.length());
+                    if (relative.isEmpty() || relative.equals("hyper_instance.json") ||
+                            relative.equals("icon.webp") || relative.equals("icon.png") ||
+                            relative.equals(META_FILE)) {
+                        continue;
+                    }
+                    if (relative.startsWith(".minecraft/")) {
+                        relative = relative.substring(".minecraft/".length());
+                    } else if (relative.startsWith("minecraft/")) {
+                        relative = relative.substring("minecraft/".length());
+                    }
+                    if (relative.isEmpty()) continue;
+
+                    entriesSeen++;
+                    if (entriesSeen > MAX_ENTRIES) {
+                        throw new IOException("The Hyper archive contains too many files.");
+                    }
+                    if (entry.getSize() > 1024L * 1024L * 1024L) {
+                        throw new IOException("An imported Hyper file exceeds the 1 GB per-file limit.");
+                    }
+
+                    String safePath = safeRelative(relative);
+                    File target = safeChild(stagedMinecraft, safePath);
+                    ensureDirectory(target.getParentFile() == null ? stagedMinecraft : target.getParentFile());
+                    try (java.io.InputStream input = zip.getInputStream(entry);
+                         FileOutputStream output = new FileOutputStream(target)) {
+                        byte[] buffer = new byte[64 * 1024];
+                        int count;
+                        while ((count = input.read(buffer)) != -1) {
+                            bytesWritten += count;
+                            if (bytesWritten > MAX_UNCOMPRESSED_BYTES) {
+                                throw new IOException("The Hyper archive exceeds the 4 GB extraction safety limit.");
+                            }
+                            output.write(buffer, 0, count);
+                        }
+                        output.getFD().sync();
+                    }
+                }
+                if (entriesSeen == 0) {
+                    throw new IOException("The Hyper archive contains no instance files.");
+                }
+
+                LoaderComponent loader = loaderFromHyperVersionId(versionId, baseMinecraftVersion);
+                String rendererId = normalizeHyperRenderer(metadata.optString("renderer"));
+                String javaArgs = nonBlank(metadata.optString("jvmArgs"));
+                if (javaArgs != null && (javaArgs.length() > 8192 || javaArgs.indexOf('\u0000') >= 0)) {
+                    throw new IOException("The Hyper instance has invalid or excessively long JVM arguments.");
+                }
+                int argsMode = Math.max(0, Math.min(2, metadata.optInt("argsMode", 0)));
+
+                // Do not carry over another launcher's runtime/control paths.
+                // Those point into Hyper's private app storage and may not exist in TSI.
+                created = createInternal(instanceName, versionId, metadata.optBoolean("isPinned", false), false);
+                mergeStagedMinecraft(stagedMinecraft, created.getGameDirectory());
+
+                GameInstance imported = new GameInstance(
+                        created.getId(), created.getName(), versionId, baseMinecraftVersion,
+                        created.isPinned(),
+                        loader == null ? null : loader.id,
+                        loader == null ? null : loader.version,
+                        created.getCreatedAt(), created.getGameDirectory(), rendererId,
+                        javaArgs, null, null, argsMode, false);
+                writeInstance(imported);
+                select(imported.getId());
+                return imported;
+            }
+        } catch (Exception error) {
+            if (created != null) {
+                try { deleteTree(instanceRoot(created.getId())); } catch (Exception ignored) { }
+            }
+            if (error instanceof IOException) throw (IOException) error;
+            throw new IOException("Could not import the Hyper Launcher instance: " +
+                    (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()), error);
+        } finally {
+            try { deleteTree(staging); } catch (Exception ignored) { }
+        }
+    }
+
+    private String resolveHyperMinecraftVersion(File stagedMinecraft, String versionId) throws IOException {
+        File[] candidates = new File[] {
+                new File(new File(stagedMinecraft, "versions"), versionId),
+                new File(new File(minecraftRoot, "versions"), versionId)
+        };
+        for (File versionRoot : candidates) {
+            File jsonFile = new File(versionRoot, versionId + ".json");
+            if (!jsonFile.isFile()) continue;
+            try {
+                JSONObject versionJson = new JSONObject(readText(jsonFile));
+                String inherited = nonBlank(versionJson.optString("inheritsFrom"));
+                if (inherited != null) return inherited;
+                String declaredId = nonBlank(versionJson.optString("id"));
+                if (declaredId != null) return declaredId;
+            } catch (Exception error) {
+                throw new IOException("The Hyper instance contains invalid version metadata.", error);
+            }
+        }
+
+        if (versionId.startsWith("fabric-loader-") || versionId.startsWith("quilt-loader-")) {
+            int separator = versionId.lastIndexOf('-');
+            if (separator > 0 && separator < versionId.length() - 1) {
+                return versionId.substring(separator + 1);
+            }
+        }
+        int forgeSeparator = versionId.indexOf("-forge-");
+        if (forgeSeparator > 0) return versionId.substring(0, forgeSeparator);
+
+        if (versionId.startsWith("neoforge-") || versionId.startsWith("optifine-")) {
+            throw new IOException(
+                    "The Hyper instance is a modded profile but its export does not include " +
+                    "the version JSON needed to identify the Minecraft base version. " +
+                    "Export it as a MultiMC/Prism-compatible ZIP from Hyper Launcher instead.");
+        }
+        return versionId;
+    }
+
+    private LoaderComponent loaderFromHyperVersionId(String versionId, String baseVersion) {
+        if (versionId.startsWith("fabric-loader-")) {
+            String value = versionId.substring("fabric-loader-".length());
+            int separator = value.lastIndexOf('-');
+            if (separator > 0 && value.substring(separator + 1).equals(baseVersion)) {
+                return new LoaderComponent("net.fabricmc.fabric-loader", value.substring(0, separator));
+            }
+        }
+        if (versionId.startsWith("quilt-loader-")) {
+            String value = versionId.substring("quilt-loader-".length());
+            int separator = value.lastIndexOf('-');
+            if (separator > 0 && value.substring(separator + 1).equals(baseVersion)) {
+                return new LoaderComponent("org.quiltmc.quilt-loader", value.substring(0, separator));
+            }
+        }
+        int forgeSeparator = versionId.indexOf("-forge-");
+        if (forgeSeparator > 0 && versionId.substring(0, forgeSeparator).equals(baseVersion)) {
+            return new LoaderComponent("net.minecraftforge", versionId.substring(forgeSeparator + "-forge-".length()));
+        }
+        if (versionId.startsWith("neoforge-")) {
+            return new LoaderComponent("net.neoforged.neoforge", versionId.substring("neoforge-".length()));
+        }
+        return null;
+    }
+
+    private String normalizeHyperRenderer(String renderer) {
+        String value = nonBlank(renderer);
+        if (value == null) return null;
+        if ("mobileglues".equals(value)) return "opengles_mobileglues";
+        Set<String> supported = new HashSet<>(Arrays.asList(
+                "opengles2", "opengles2_5", "opengles3", "opengles3_ltw",
+                "opengles_mobileglues", "vulkan_zink", "opengles3_desktopgl_zink_kopper",
+                "opengles_system_gles"));
+        return supported.contains(value) ? value : null;
     }
 
     /** Export a portable ZIP accepted by MultiMC/Prism and Hyper Launcher. */
@@ -783,11 +995,20 @@ public final class GameInstanceRepository {
     }
 
     private static String readZipEntry(ZipFile zip, ZipEntry entry) throws IOException {
+        return readZipEntry(zip, entry, MAX_UNCOMPRESSED_BYTES);
+    }
+
+    private static String readZipEntry(ZipFile zip, ZipEntry entry, long maximumBytes) throws IOException {
         try (java.io.InputStream input = zip.getInputStream(entry);
              java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
+            long total = 0L;
             int count;
-            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            while ((count = input.read(buffer)) != -1) {
+                total += count;
+                if (total > maximumBytes) throw new IOException("Archive metadata exceeds its size limit.");
+                output.write(buffer, 0, count);
+            }
             return new String(output.toByteArray(), StandardCharsets.UTF_8);
         }
     }
