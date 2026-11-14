@@ -39,8 +39,10 @@ old = """        // FIXME: Automatic detection should be based on provided hint 
 
 new = """        // TSI renderer policy:
         // - Preserve a renderer explicitly selected in the Minecraft profile.
-        // - For a new/unconfigured profile, prefer GL4ES/Krypton (fast general-purpose path).
-        // - Fall back only to a renderer that Amethyst reports as compatible with this device.
+        // - For a new/unconfigured profile on Minecraft 1.17+, prefer LTW
+        //   when the device and bundled native library report it as compatible.
+        // - Otherwise prefer GL4ES/Krypton, then MobileGlues as a safe fallback.
+        // - Preserve any explicitly selected compatible renderer from the profile editor.
         // - Do not auto-select Zink: it is a compatibility/shader option, not the fast default.
         boolean hasAngelica = hasMods("angelica");
         if (hasAngelica) Tools.useSFPEW = false;
@@ -50,13 +52,39 @@ new = """        // TSI renderer policy:
             String previousRenderer = Tools.LOCAL_RENDERER;
             Tools.RenderersList renderersList = Tools.getCompatibleRenderers(this);
             String selectedRenderer = null;
-            String[] preferredRendererOrder = new String[] {
-                    "opengles2",
-                    "opengles2_5",
-                    "opengles3",
-                    "opengles_mobileglues",
-                    "opengles3_ltw"
-            };
+
+            // LTW is supported by Amethyst only for Minecraft 1.17 and newer.
+            // Parse the numeric release prefix; unknown/snapshot IDs use the safe
+            // general-purpose order and remain manually selectable in the profile editor.
+            boolean isLtwMinecraftVersion = false;
+            try {
+                String numericVersion = version.split("-", 2)[0];
+                String[] versionParts = numericVersion.split("\\.");
+                if (versionParts.length >= 2) {
+                    int majorVersion = Integer.parseInt(versionParts[0]);
+                    int minorVersion = Integer.parseInt(versionParts[1]);
+                    isLtwMinecraftVersion = majorVersion > 1 ||
+                            (majorVersion == 1 && minorVersion >= 17);
+                }
+            } catch (RuntimeException ignored) {
+                isLtwMinecraftVersion = false;
+            }
+
+            String[] preferredRendererOrder = isLtwMinecraftVersion
+                    ? new String[] {
+                            "opengles3_ltw",
+                            "opengles2",
+                            "opengles2_5",
+                            "opengles3",
+                            "opengles_mobileglues"
+                    }
+                    : new String[] {
+                            "opengles2",
+                            "opengles2_5",
+                            "opengles3",
+                            "opengles_mobileglues",
+                            "opengles3_ltw"
+                    };
             for (String candidate : preferredRendererOrder) {
                 if (renderersList.rendererIds.contains(candidate)) {
                     selectedRenderer = candidate;
@@ -93,6 +121,8 @@ elif "Auto-selected high-performance renderer " not in source:
 required = [
     'if (Tools.LOCAL_RENDERER == null ||',
     '"opengles2"',
+    '"opengles3_ltw"',
+    '"isLtwMinecraftVersion"',
     '"opengles_mobileglues"',
     'renderersList.rendererIds.isEmpty()',
     'No compatible Android renderer is available.',
