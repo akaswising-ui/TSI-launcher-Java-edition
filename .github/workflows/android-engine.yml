@@ -165,7 +165,6 @@ jobs:
               "Lcom/tsi/launcher/instances/GameInstanceRepository;",
               "importHyperInstanceArchive",
               "hyper_instance.json",
-              "This Hyper modded instance ZIP does not include its loader version JSON.",
               "Lcom/tsi/launcher/GameInstanceManagerActivity;",
               "GAME INSTANCES",
               "IMPORT ZIP",
