@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.SystemClock;
+import com.tsi.launcher.instances.GameInstance;
+import com.tsi.launcher.instances.GameInstanceRepository;
 import com.tsi.launcher.storage.AmethystStoragePaths;
 import org.json.JSONObject;
 import java.io.File;
@@ -387,7 +389,7 @@ public final class AmethystEngineBridge {
                 ? new File(minecraftRoot.getParentFile() == null ? minecraftRoot : minecraftRoot.getParentFile(), "shared_dir")
                 : new File(selectedInstanceRoot, "game");
         ensureDirectory(gameDirectory);
-        applyPerformanceProfile(context, safeInstanceId, false);
+        applyPerformanceProfile(context, safeInstanceId, gameDirectory, false);
 
         String safePlayer = sanitizePlayerName(playerName);
         String safeRenderer = optionalIdentifier(rendererId, "renderer identifier", 80);
@@ -440,9 +442,24 @@ public final class AmethystEngineBridge {
      */
     public static String applyPerformanceProfile(Context context, String instanceId,
                                                   boolean force) throws IOException {
-        String safeInstanceId = instanceId == null ? "" : instanceId.trim();
-        if (!safeInstanceId.matches("[A-Za-z0-9._+\\-]{1,100}")) {
-            throw new IllegalArgumentException("Invalid game instance identifier for FPS tuning.");
+        String safeInstanceId = validateInstanceId(instanceId);
+        GameInstance selected = null;
+        for (GameInstance candidate : new GameInstanceRepository(context).list()) {
+            if (safeInstanceId.equals(candidate.getId())) {
+                selected = candidate;
+                break;
+            }
+        }
+        if (selected == null) throw new IOException("Selected Minecraft instance no longer exists.");
+        return applyPerformanceProfile(context, safeInstanceId, selected.getGameDirectory(), force);
+    }
+
+    private static String applyPerformanceProfile(Context context, String instanceId,
+                                                   File selectedGameDirectory,
+                                                   boolean force) throws IOException {
+        String safeInstanceId = validateInstanceId(instanceId);
+        if (selectedGameDirectory == null) {
+            throw new IOException("Selected Minecraft instance has no game directory.");
         }
 
         DevicePerformanceProfileSnapshot device = DevicePerformanceProfile.detect(context);
@@ -461,9 +478,14 @@ public final class AmethystEngineBridge {
             throw new IOException("Selected Minecraft instance points outside the instances folder.");
         }
 
-        File gameDirectory = new File(instanceRoot, "game").getCanonicalFile();
-        if (!gameDirectory.getPath().startsWith(instanceRoot.getPath() + File.separator)) {
-            throw new IOException("Selected Minecraft game folder points outside its instance.");
+        File gameDirectory = selectedGameDirectory.getCanonicalFile();
+        File instanceGameDirectory = new File(instanceRoot, "game").getCanonicalFile();
+        File sharedDataDirectory = new File(
+                minecraftRoot.getParentFile() == null ? minecraftRoot : minecraftRoot.getParentFile(),
+                "shared_dir").getCanonicalFile();
+        if (!gameDirectory.equals(instanceGameDirectory)
+                && !gameDirectory.equals(sharedDataDirectory)) {
+            throw new IOException("Selected game folder is not owned by this Minecraft instance.");
         }
         ensureDirectory(gameDirectory);
 
@@ -480,6 +502,14 @@ public final class AmethystEngineBridge {
                 + " • render distance " + device.getRenderDistance()
                 + " • simulation distance " + device.getSimulationDistance()
                 + " • FPS cap " + device.getMaxFps() + ".";
+    }
+
+    private static String validateInstanceId(String instanceId) {
+        String safeInstanceId = instanceId == null ? "" : instanceId.trim();
+        if (!safeInstanceId.matches("[A-Za-z0-9._+\\-]{1,100}")) {
+            throw new IllegalArgumentException("Invalid game instance identifier for FPS tuning.");
+        }
+        return safeInstanceId;
     }
 
     private static void ensureDefaultControlMap(Context context) throws IOException {
