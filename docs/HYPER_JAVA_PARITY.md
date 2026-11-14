@@ -44,4 +44,21 @@ Reference inspected: [Hyper Launcher 3 README](https://github.com/ashmeet-op/Hyp
 - LiteLoader: absent from the pinned Amethyst installer flow inspected for this integration.
 - Arbitrary Hyper-private runtime/control file paths: not portable across Android app-private storage.
 
+## Additional Hyper source-tree tools outside its README feature list
+
+The Hyper source tree also contains tools that are not part of the published README feature summary. They are not represented as completed TSI features in this branch:
+
+| Source-tree tool | Current TSI status |
+|---|---|
+| Game-surface screen recorder and recordings gallery | Not implemented in the TSI dashboard |
+| Vulkan / Adreno driver package manager | Not implemented as a Hyper-compatible package manager; TSI exposes only renderers supported by the pinned Amethyst engine |
+| External renderer APK plugin manager | Not compatible with Hyper plugin packages; only Amethyst-supported built-in renderers are selectable |
+| Built-in file-manager UI | No Hyper-style in-launcher file browser; TSI uses Android document pickers and the embedded engine's file-selection facilities |
+| Custom launcher themes / Hyper Material UI | Not cloned; TSI keeps its existing app identity and dashboard |
+| Per-instance custom image icon | Hyper icon metadata is not imported into the TSI instance card model |
+| Quick-settings game overlay and recording controls | Not cloned into TSI's existing interface |
+| Gemini crash-analysis helper | Not implemented; it is an optional service-specific tool, not a Minecraft runtime requirement |
+
+These omissions matter: a feature is not implemented merely because a button or placeholder can be drawn. Adding them properly would require separate Android permission flows, storage models, driver/plugin compatibility and, for some items, engine-level integration.
+
 A successful CI build verifies compilation, packaging and repository-level tests. It does not replace installing the resulting APK and testing game launch, mod loading, rendering, input and crashes on a physical Android device.
