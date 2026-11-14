@@ -568,7 +568,7 @@ where
 
 #[no_mangle]
 pub unsafe extern "C" fn tsi_sha1_matches(path: *const c_char, expected: *const c_char) -> c_int {
-    let result = (|| {
+    let result: Result<c_int, String> = (|| {
         let path = Path::new(unsafe { string_arg(path, "File path") }?);
         let expected = unsafe { string_arg(expected, "Expected SHA-1") }?;
         if expected.len() != 40 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -591,7 +591,7 @@ pub unsafe extern "C" fn tsi_is_verified_file(
     expected: *const c_char,
     expected_size: c_longlong,
 ) -> c_int {
-    let result = (|| {
+    let result: Result<c_int, String> = (|| {
         let path = Path::new(unsafe { string_arg(path, "File path") }?);
         let expected = if expected.is_null() {
             None
