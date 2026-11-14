@@ -243,7 +243,7 @@ public final class GameInstanceManagerActivity extends Activity {
     }
 
     private void importArchive(Uri uri) {
-        runOperation("Importing MultiMC / Prism archive…", () -> {
+        runOperation("Importing MultiMC / Prism / Hyper instance archive…", () -> {
             File temporary = new File(getCacheDir(), "tsi-mmc-" + System.currentTimeMillis() + ".zip");
             try {
                 try (InputStream input = getContentResolver().openInputStream(uri);
