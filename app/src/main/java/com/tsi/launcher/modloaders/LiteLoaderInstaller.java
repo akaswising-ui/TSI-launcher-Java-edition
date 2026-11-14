@@ -59,6 +59,11 @@ public final class LiteLoaderInstaller {
         if (!baseVersion.equals(baseJson.optString("id"))) {
             throw new IOException("The selected Minecraft version metadata is invalid.");
         }
+        File baseClientJar = new File(versionFolder, baseVersion + ".jar");
+        if (!baseClientJar.isFile() || baseClientJar.length() == 0L) {
+            throw new IOException("Install the full Minecraft " + baseVersion +
+                    " client first. The vanilla client JAR is missing.");
+        }
         if (!baseJson.has("minecraftArguments")) {
             throw new IOException("This Minecraft version uses a modern argument format; LiteLoader legacy profiles are not supported.");
         }
@@ -107,14 +112,14 @@ public final class LiteLoaderInstaller {
         if (listedLibraries != null) {
             for (int index = 0; index < listedLibraries.length(); index++) {
                 JSONObject item = listedLibraries.optJSONObject(index);
-                if (item != null) libraries.put(withSecureLibraryUrl(item));
+                if (item != null) appendUniqueLibrary(libraries, item);
             }
         }
         JSONArray loaderLibraries = latest.optJSONArray("libraries");
         if (loaderLibraries != null) {
             for (int index = 0; index < loaderLibraries.length(); index++) {
                 JSONObject item = loaderLibraries.optJSONObject(index);
-                if (item != null) libraries.put(withSecureLibraryUrl(item));
+                if (item != null) appendUniqueLibrary(libraries, item);
             }
         }
 
@@ -169,6 +174,16 @@ public final class LiteLoaderInstaller {
         listener.onProgress("LiteLoader " + loaderVersion + " installed on Minecraft " +
                 baseVersion + " as " + installedVersionId + ".");
         return installedVersionId;
+    }
+
+    private void appendUniqueLibrary(JSONArray result, JSONObject source) throws Exception {
+        String name = source.optString("name", "").trim();
+        if (name.isEmpty()) throw new IOException("LiteLoader dependency has no Maven coordinate.");
+        for (int index = 0; index < result.length(); index++) {
+            JSONObject existing = result.optJSONObject(index);
+            if (existing != null && name.equals(existing.optString("name"))) return;
+        }
+        result.put(withSecureLibraryUrl(source));
     }
 
     private JSONObject withSecureLibraryUrl(JSONObject source) throws Exception {
@@ -328,7 +343,7 @@ public final class LiteLoaderInstaller {
         return target;
     }
 
-    private static int compareVersions(String left, String right) {
+    static int compareVersions(String left, String right) {
         String[] a = left.split("\\.");
         String[] b = right.split("\\.");
         int length = Math.max(a.length, b.length);
