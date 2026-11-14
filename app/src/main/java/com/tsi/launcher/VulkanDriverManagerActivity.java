@@ -139,7 +139,7 @@ public final class VulkanDriverManagerActivity extends Activity {
         list.removeAllViews();
         status.setText(packages.size() + " package(s) installed. " +
                 (selectedHash == null ? "Built-in driver selected." : "A custom package is selected."));
-        Button builtIn = button("USE BUILT-IN / SYSTEM TURNIP");
+        Button builtIn = button("RESET TO BUILT-IN TURNIP");
         builtIn.setOnClickListener(v -> runManagerAction("Selecting built-in driver…", () -> {
             manager.select(null);
             return "Built-in / system driver selected.";
