@@ -248,8 +248,9 @@ public final class GameInstanceManagerActivity extends Activity {
     }
 
     private File instanceIconFile(GameInstance instance) {
-        File folder = instance.getGameDirectory().getParentFile();
-        return new File(folder == null ? instance.getGameDirectory() : folder, "instance-icon.img");
+        File folder = new File(getFilesDir(), "instance-icons");
+        if (!folder.isDirectory()) folder.mkdirs();
+        return new File(folder, instance.getId() + ".img");
     }
 
     private Bitmap decodeInstanceIcon(File file, int requestedSize) {
