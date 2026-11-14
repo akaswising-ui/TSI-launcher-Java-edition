@@ -35,6 +35,7 @@
         <activity android:name=".CrashAnalyzerActivity" android:exported="false" />
         <activity android:name=".ExternalRendererManagerActivity" android:exported="false" />
         <activity android:name=".VulkanDriverManagerActivity" android:exported="false" />
+        <activity android:name=".LiteLoaderInstallActivity" android:exported="false" />
 
         <service
             android:name=".recording.GameRecordingService"
