@@ -1142,6 +1142,10 @@ public final class GameInstanceRepository {
             }
             return "Name:" + name;
         }
+        if (runtime.matches("(?i)Java\\s*[0-9]{1,2}")) {
+            return runtime.replaceAll("(?i)^Java\\s*", "Java");
+        }
+        if (runtime.matches("[0-9]{1,2}")) return runtime;
         if (runtime.length() > 80 || !runtime.matches("[A-Za-z0-9._+-]+") ||
                 ".".equals(runtime) || "..".equals(runtime)) {
             throw new IllegalArgumentException("Invalid runtime name.");
