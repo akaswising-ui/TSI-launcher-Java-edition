@@ -63,7 +63,7 @@ jobs:
       - name: Set up Rust toolchain for Android
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android, armv7-linux-androideabi
+          targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
 
       - name: Test and build TSI Rust core for Android
         working-directory: native/tsi-core
@@ -73,7 +73,7 @@ jobs:
           export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           cargo install cargo-ndk --locked
           cargo test
-          cargo ndk -t arm64-v8a -t armeabi-v7a -o ../../native-output build --release
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 -o ../../native-output build --release
 
       - name: Set up Gradle 9.6.1
         uses: gradle/actions/setup-gradle@v4
