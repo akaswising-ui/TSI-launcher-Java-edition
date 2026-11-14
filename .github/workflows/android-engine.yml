@@ -72,6 +72,9 @@ jobs:
       - name: Apply adaptive renderer default
         run: python3 scripts/apply-adaptive-renderer.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
 
+      - name: Apply installed FCL renderer APK support
+        run: python3 scripts/apply-fcl-renderer-plugins.py "$GITHUB_WORKSPACE/.build/Amethyst-Android"
+
       - name: Generate Amethyst language list
         working-directory: .build/Amethyst-Android
         run: bash scripts/languagelist_updater.sh
@@ -196,6 +199,11 @@ jobs:
               "Lnet/kdt/pojavlaunch/fragments/FileSelectorFragment;",
               "Lcom/tsi/launcher/ModPackManagerActivity;",
               "Lcom/tsi/launcher/InstalledModManagerActivity;",
+              "Lcom/tsi/launcher/ExternalRendererManagerActivity;",
+              "Lcom/tsi/launcher/plugins/ExternalRendererRegistry;",
+              "getPreparedGraphicsLibrary",
+              "tsi.fcl.",
+              "QUERY_ALL_PACKAGES",
               "Lcom/tsi/launcher/instances/InstalledModManager;",
               "importJar",
               ".jar.disabled",
