@@ -109,7 +109,7 @@ text = replace_once(text, dependency_marker, java_dependencies, "TSI Java depend
 text = replace_once(
     text,
     '                arguments "APP_SHORT_COMMANDS=true"',
-    '                // Keep the debug APK debuggable but compile native engine libraries with -O2.\\n'
+    '                // Keep the debug APK debuggable but compile native engine libraries with -O2.\n'
     '                arguments "APP_SHORT_COMMANDS=true", "NDK_DEBUG=0"',
     "optimized Amethyst native build",
 )
