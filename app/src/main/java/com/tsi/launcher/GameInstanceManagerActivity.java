@@ -212,7 +212,10 @@ public final class GameInstanceManagerActivity extends Activity {
     private void chooseImport() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/zip");
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "application/zip", "application/x-7z-compressed", "application/x-7z"
+        });
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivityForResult(intent, REQUEST_IMPORT_ZIP);
     }
@@ -243,18 +246,18 @@ public final class GameInstanceManagerActivity extends Activity {
     }
 
     private void importArchive(Uri uri) {
-        runOperation("Importing MultiMC / Prism / Hyper instance archive…", () -> {
-            File temporary = new File(getCacheDir(), "tsi-mmc-" + System.currentTimeMillis() + ".zip");
+        runOperation("Importing ZIP / 7z / MultiMC / Prism / Hyper archive…", () -> {
+            File temporary = new File(getCacheDir(), "tsi-instance-" + System.currentTimeMillis() + ".archive");
             try {
                 try (InputStream input = getContentResolver().openInputStream(uri);
                      FileOutputStream output = new FileOutputStream(temporary)) {
-                    if (input == null) throw new IOException("Android could not open the selected ZIP.");
+                    if (input == null) throw new IOException("Android could not open the selected archive.");
                     byte[] buffer = new byte[64 * 1024];
                     int count;
                     while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
                     output.getFD().sync();
                 }
-                GameInstance imported = repository.importMultiMc(temporary);
+                GameInstance imported = repository.importArchive(temporary);
                 return "Imported and selected " + imported.getName() + ".";
             } finally {
                 temporary.delete();
