@@ -58,6 +58,10 @@ jre = replace_once(
                 LD_LIBRARY_PATH = plugin.getLibraryPath() + ":" + LD_LIBRARY_PATH;
                 envMap.put("LD_LIBRARY_PATH", LD_LIBRARY_PATH);
                 envMap.putAll(plugin.environment);
+                // Keep the app-private TSI registry key separate from the renderer
+                // ID understood by the FCL/Zalith native plugin itself.
+                envMap.put("POJAV_RENDERER", plugin.nativeRendererId);
+                envMap.put("AMETHYST_RENDERER", plugin.nativeRendererId);
             } catch (Exception error) {
                 throw new IllegalStateException(
                         "Selected external renderer could not be prepared: " + error.getMessage(), error);
@@ -100,4 +104,7 @@ jre = replace_once(
     "Amethyst absolute external EGL library path",
 )
 jre_path.write_text(jre, encoding="utf-8")
+if "plugin.nativeRendererId" not in jre or '"POJAV_RENDERER"' not in jre:
+    raise SystemExit("FCL renderer patch verification failed: native renderer ID hand-off is missing")
+
 print("Installed FCL/Zalith renderer APK discovery and launch bridge.")
