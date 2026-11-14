@@ -21,6 +21,8 @@ import com.tsi.launcher.runtime.DevicePerformanceProfile;
 import com.tsi.launcher.runtime.DevicePerformanceProfileSnapshot;
 import com.tsi.launcher.runtime.JavaRuntimeManager;
 import com.tsi.launcher.runtime.VersionVmInspection;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -129,6 +131,11 @@ public final class VirtualMachineControllerActivity extends Activity {
         startButton.setTextColor(0xFFFFFFFF);
         startButton.setOnClickListener(v -> startGame());
         root.addView(startButton, matchWrap());
+
+        root.addView(section("TOOLS"));
+        Button clearCache = button("CLEAR LAUNCHER CACHE");
+        clearCache.setOnClickListener(v -> clearLauncherCache());
+        root.addView(clearCache, matchWrap());
 
         status = addText(root, "VM is stopped.", 12, 0xFF71838B, false);
         Button back = button("BACK TO DASHBOARD");
@@ -336,6 +343,68 @@ public final class VirtualMachineControllerActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void clearLauncherCache() {
+        if (busy) {
+            setStatus("Wait until the current launcher operation finishes before clearing cache.");
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Clear launcher cache?")
+                .setMessage("This removes temporary cache files only. Minecraft worlds, mods, configs, installed versions and Java runtimes are kept.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("CLEAR", (dialog, which) -> {
+                    setStatus("Clearing temporary cache files…");
+                    io.execute(() -> {
+                        try {
+                            long removed = clearCacheChildren(getCacheDir());
+                            File external = getExternalCacheDir();
+                            if (external != null && !external.getCanonicalFile()
+                                    .equals(getCacheDir().getCanonicalFile())) {
+                                removed += clearCacheChildren(external);
+                            }
+                            long total = removed;
+                            main.post(() -> setStatus("Launcher cache cleared • "
+                                    + android.text.format.Formatter.formatShortFileSize(this, total)
+                                    + " released. Worlds and game files were preserved."));
+                        } catch (Exception error) {
+                            main.post(() -> setStatus("Cache clear failed: " + message(error)));
+                        }
+                    });
+                })
+                .show();
+    }
+
+    private static long clearCacheChildren(File directory) throws IOException {
+        if (!directory.exists()) return 0L;
+        if (!directory.isDirectory()) throw new IOException("Cache location is not a directory.");
+        File root = directory.getCanonicalFile();
+        File[] children = directory.listFiles();
+        if (children == null) throw new IOException("Could not read the cache directory.");
+        long removed = 0L;
+        for (File child : children) removed += deleteCacheEntry(root, child);
+        return removed;
+    }
+
+    private static long deleteCacheEntry(File root, File entry) throws IOException {
+        File canonical = entry.getCanonicalFile();
+        if (!canonical.equals(root)
+                && !canonical.getPath().startsWith(root.getPath() + File.separator)) {
+            long length = entry.length();
+            if (!entry.delete()) throw new IOException("Could not remove cache link: " + entry.getName());
+            return Math.max(0L, length);
+        }
+        long removed = 0L;
+        if (entry.isDirectory()) {
+            File[] children = entry.listFiles();
+            if (children == null) throw new IOException("Could not read cache folder: " + entry.getName());
+            for (File child : children) removed += deleteCacheEntry(root, child);
+        } else {
+            removed = Math.max(0L, entry.length());
+        }
+        if (!entry.delete()) throw new IOException("Could not remove cache file: " + entry.getName());
+        return removed;
     }
 
     private TextView section(String title) {
