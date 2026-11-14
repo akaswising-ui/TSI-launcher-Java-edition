@@ -203,6 +203,9 @@ jobs:
               "Auto-selected high-performance renderer ",
               "No compatible Android renderer is available.",
               "opengles_mobileglues",
+              "opengles3_ltw",
+              "isLtwMinecraftVersion",
+              "Lnet/kdt/pojavlaunch/fragments/ProfileEditorFragment;",
               "controlFile",
           ]
           missing = [item for item in required if item not in dex_strings]
