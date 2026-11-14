@@ -55,6 +55,7 @@ public final class ExternalRendererManagerActivity extends Activity {
     private void refresh() {
         list.removeAllViews();
         List<String> ids = ExternalRendererRegistry.getRendererIds(this);
+        ExternalRendererRegistry.invalidateEngineRendererCache();
         status.setText(ids.size() + " compatible renderer APK(s) found. Plugins must already be installed.");
         if (ids.isEmpty()) {
             list.addView(text("No compatible FCL renderer APK was detected for this device ABI. This is not an error; built-in renderers remain available in Engine Settings.",
