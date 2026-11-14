@@ -179,7 +179,7 @@ public final class ExternalRendererRegistry {
                     }
                 } else if ("LIB_MESA_NAME".equals(key) || "MESA_LIBRARY".equals(key) ||
                         "POJAVEXEC_EGL".equals(key)) {
-                    String safe = safeLibraryName(value);
+                    String safe = safeLibraryName(new File(value).getName());
                     File optionalLibrary = new File(nativeRoot, safe).getCanonicalFile();
                     if (nativeRoot.equals(optionalLibrary.getParentFile()) && optionalLibrary.isFile()) {
                         environment.put(key, optionalLibrary.getAbsolutePath());
