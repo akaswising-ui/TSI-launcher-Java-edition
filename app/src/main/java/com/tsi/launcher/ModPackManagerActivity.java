@@ -97,6 +97,11 @@ public final class ModPackManagerActivity extends Activity {
         loadersButton.setOnClickListener(v -> openAmethyst("tsi_open_modloader_manager"));
         root.addView(loadersButton, matchWrap());
 
+        Button liteLoaderButton = button("INSTALL LITELOADER (LEGACY 1.8.9–1.12.2)");
+        liteLoaderButton.setOnClickListener(v ->
+                startActivity(new Intent(this, LiteLoaderInstallActivity.class)));
+        root.addView(liteLoaderButton, matchWrap());
+
         status = text("Connecting to modpack providers…", 12, 0xFF9FC18E, false);
         status.setPadding(0, dp(10), 0, dp(10));
         root.addView(status, matchWrap());
