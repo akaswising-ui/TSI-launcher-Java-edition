@@ -13,7 +13,7 @@ public class DevicePerformanceProfileTest {
         assertEquals(2, p.getWorkerThreads());
         assertEquals(4, p.getRenderDistance());
         assertEquals(3, p.getSimulationDistance());
-        assertEquals(30, p.getMaxFps());
+        assertEquals(60, p.getMaxFps());
     }
 
     @Test public void androidLowRamFlagOverridesAdvertisedMemoryTier() {
