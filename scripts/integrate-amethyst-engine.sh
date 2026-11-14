@@ -343,6 +343,7 @@ launcher_activity = (
     '        <activity android:name="com.tsi.launcher.CrashAnalyzerActivity" android:exported="false" />\n'
     '        <activity android:name="com.tsi.launcher.ExternalRendererManagerActivity" android:exported="false" />\n'
     '        <activity android:name="com.tsi.launcher.VulkanDriverManagerActivity" android:exported="false" />\n'
+    '        <activity android:name="com.tsi.launcher.LiteLoaderInstallActivity" android:exported="false" />\n'
     '        <service android:name="com.tsi.launcher.recording.GameRecordingService" android:exported="false" android:foregroundServiceType="mediaProjection" />\n'
     '        <service android:name="com.tsi.launcher.GameQuickToolsService" android:exported="false" android:foregroundServiceType="specialUse">\n'
     '            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled floating game quick tools overlay" />\n'
