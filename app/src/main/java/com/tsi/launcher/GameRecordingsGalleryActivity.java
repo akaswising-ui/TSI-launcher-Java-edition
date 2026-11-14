@@ -85,7 +85,7 @@ public final class GameRecordingsGalleryActivity extends Activity {
 
     private void open(File file) {
         try {
-            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", file);
+            Uri uri = FileProvider.getUriForFile(this, "com.tsi.launcher.files", file);
             Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/mp4")
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(intent);
@@ -96,7 +96,7 @@ public final class GameRecordingsGalleryActivity extends Activity {
 
     private void share(File file) {
         try {
-            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", file);
+            Uri uri = FileProvider.getUriForFile(this, "com.tsi.launcher.files", file);
             Intent send = new Intent(Intent.ACTION_SEND).setType("video/mp4")
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
