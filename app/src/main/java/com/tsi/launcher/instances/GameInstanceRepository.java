@@ -350,9 +350,6 @@ public final class GameInstanceRepository {
                 }
                 requireSafeVersion(versionId);
 
-                String baseMinecraftVersion = resolveHyperMinecraftVersion(stagedMinecraft, versionId);
-                requireSafeVersion(baseMinecraftVersion);
-
                 String rawName = nonBlank(metadata.optString("name"));
                 if (rawName == null) {
                     String archiveName = archive.getName();
@@ -413,6 +410,8 @@ public final class GameInstanceRepository {
                     throw new IOException("The Hyper archive contains no instance files.");
                 }
 
+                String baseMinecraftVersion = resolveHyperMinecraftVersion(stagedMinecraft, versionId);
+                requireSafeVersion(baseMinecraftVersion);
                 LoaderComponent loader = loaderFromHyperVersionId(versionId, baseMinecraftVersion);
                 if (loader != null) {
                     File stagedVersionJson = new File(
